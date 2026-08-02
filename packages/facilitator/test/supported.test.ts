@@ -94,14 +94,15 @@ describe("GET /supported", () => {
     ]);
   });
 
-  it("advertises no extensions until one is actually reachable", async () => {
+  it("advertises bazaar now that the discovery endpoint is reachable", async () => {
     harness = await startHarness();
 
     const body = (await harness.app.inject({ method: "GET", url: "/supported" })).json();
 
-    // DECISIONS D-016: this session ships no discovery endpoints, so listing `bazaar`
-    // here would be the "advertised vs reachable support" gap the RFP screens for (D-010).
-    expect(body.extensions).toEqual([]);
+    // DECISIONS D-016: `bazaar` was deliberately absent until this same change mounted
+    // GET /discovery/resources — advertised and reachable move together, in both
+    // directions (the "advertised vs reachable support" gap the RFP screens for, D-010).
+    expect(body.extensions).toEqual(["bazaar"]);
   });
 
   it("needs no network access to answer", async () => {
@@ -123,7 +124,9 @@ describe("unknown routes", () => {
   it("returns a machine-readable code rather than a bare 404", async () => {
     harness = await startHarness();
 
-    const response = await harness.app.inject({ method: "GET", url: "/discovery/resources" });
+    // /discovery/search is real in the spec but not mounted yet — precisely the
+    // kind of probe that must get a named rejection, not a silent 404 (D-016).
+    const response = await harness.app.inject({ method: "GET", url: "/discovery/search" });
 
     expect(response.statusCode).toBe(404);
     const body = response.json();

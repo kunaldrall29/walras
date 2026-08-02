@@ -371,3 +371,83 @@ S3's throughput demonstration (the knob shipped in S1 and is unit-tested; EVIDEN
 "Not yet captured" tracks it). D-012's substance is unchanged — this entry records that S2
 knowingly deferred it and what deferring it cost: 100 stroops per settlement, in the
 operator's favour.
+
+---
+
+## D-022 — Manual registration endpoint: skipped for the pre-build.
+**Status:** ADOPTED · 2026-08-02 · Evidence: F-023, F-010
+
+The spec treats how resources enter the catalog as an implementation detail, and the
+ecosystem's primary path — the one CDP demonstrates and the one that carries the anti-spam
+property — is settle-gated automatic cataloging (D-004). A manual registration endpoint is
+at most a secondary convenience, it has no spec shape to conform to, and it would dilute
+the demo's central claim: **settlement IS registration**. Every listing in the walras
+catalog exists because a real payment settled on-chain.
+
+**Decision:** no manual registration endpoint in the pre-build. Revisit for the funded
+build only if operator experience shows sellers need a pre-payment preview of their own
+listing (a validation dry-run endpoint would then be the right shape, not a write path).
+
+---
+
+## D-023 — Catalog storage is Node's built-in `node:sqlite`, experimental flag accepted.
+**Status:** ADOPTED · 2026-08-02 · Evidence: F-070, F-060
+
+Options were `better-sqlite3` (MIT, native build) or the built-in `node:sqlite`
+(`DatabaseSync`). The built-in wins on every axis that matters here: zero added
+dependencies (the license surface stays exactly as F-060 scanned it), no native
+compilation in CI or on reviewer machines, and a synchronous API that fits the
+settle-hook's bounded-work invariant. The cost: the module emits `ExperimentalWarning`
+on the pinned Node v24.14.0 and its API could shift in future Node majors.
+
+**Decision:** `node:sqlite`, WAL journal mode, `busy_timeout` 100 ms. The store is a
+single class behind an interface-shaped surface (`packages/bazaar/src/store.ts`); if the
+experimental API breaks or the funded build needs Postgres, the swap is contained to one
+file. The warning is visible in test output on purpose — suppressing it would hide the
+risk this entry records.
+
+---
+
+## D-024 — Listing identity: (resource, type, toolName), owned by the first settled payTo.
+**Status:** ADOPTED · 2026-08-02 · Evidence: F-029, F-035, F-072; EVIDENCE S3-2, S3-4
+
+The catalog key is the spec's tuple — `(resource URL, type, toolName)`, with `toolName`
+empty for HTTP (F-029). Identity binding is ours to design, and everything echoable in
+the payload is client-controlled (F-072), so the ONLY trustworthy identity signal in a
+settle-gated catalog is `paymentRequirements.payTo`: the scheme verified the on-chain
+transfer actually credits it (F-035), and settlement proved the payment was real.
+
+**Decision:** the first successfully indexed settlement binds the listing to its payTo.
+Same key + same payTo → refresh (latest settlement wins on metadata; accepts accumulate
+deduped). Same key + different payTo → `bazaar_listing_owned_by_other_payee`, nothing
+written, transactionally (BEGIN IMMEDIATE around check-and-write). Proven live: a real
+settled payment to the wrong payee could not touch the listing (S3-4).
+
+**Recorded limitations, deliberate for the pre-build:** (a) a seller that rotates its
+payTo cannot update its old listing — operational answer deferred to the funded build
+(likely: any payTo already present in the listing's accepts set may rotate it);
+(b) URL squatting remains possible — an attacker can pay to catalog a URL it does not
+control *before* the real owner ever settles, because nothing proves URL control at
+index time. The catalog's `accepts` is advisory; actual payments always follow the live
+402 from the resource server itself, so a squat pollutes metadata but cannot redirect
+funds of a buyer that follows the protocol. Same exposure exists in the reference
+ecosystem; candidate for an upstream note.
+
+---
+
+## D-025 — Header outcome semantics: `rejected` means the client's payload; walras faults omit the header.
+**Status:** ADOPTED · 2026-08-02 · Evidence: F-024, F-073; EVIDENCE S3-2
+
+The spec gives three statuses. walras emits two: `success` (validated and written) and
+`rejected` (client-attributable soft-drop, always with `rejectedReason` + additive machine
+`code` per D-014 — both within the stock client's log allowlist, F-073). `processing` is
+never emitted because walras never catalogs asynchronously: the indexing work is
+synchronous and structurally bounded (64 KiB extensions cap before Ajv touches anything;
+100 ms DB busy timeout), which is how D-015's "small budget" is enforced rather than
+promised. An **internal** indexer fault emits no header at all — the header is a MAY
+(F-024), and reporting a walras bug as `rejected` would tell the seller to go fix a
+payload that is fine. The settle response body is never touched by any of this.
+
+**Decision:** two statuses + omission, exactly as above; the D-015 forced-failure test
+pins the omission path. Revisit `processing` only if the funded build moves indexing off
+the request thread.

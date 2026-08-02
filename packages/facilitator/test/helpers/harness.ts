@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Keypair } from "@stellar/stellar-sdk";
 import type { FastifyInstance } from "fastify";
+import type { BazaarStore } from "@walras/bazaar";
 import type { PaymentPayload, PaymentRequirements } from "@x402/core/types";
 import { loadConfig } from "../../src/config.js";
 import { buildServer } from "../../src/server.js";
@@ -91,6 +92,8 @@ export interface HarnessOptions {
   transactionStatus?: "SUCCESS" | "FAILED";
   /** Status the RPC double reports for `sendTransaction`. */
   sendStatus?: "PENDING" | "ERROR";
+  /** Catalog store injected into the server (e.g. pre-seeded, or broken on purpose). */
+  bazaarStore?: BazaarStore;
 }
 
 /**
@@ -117,11 +120,14 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     SUBMITTER_SECRET: fixtureSubmitterKeypair().secret(),
     PORT: "4021",
     FEE_MODE: "free",
-    DB_PATH: "./data/catalog.db",
+    DB_PATH: ":memory:",
     ...options.env,
   });
 
-  const app = buildServer({ config });
+  const app = buildServer({
+    config,
+    ...(options.bazaarStore ? { bazaarStore: options.bazaarStore } : {}),
+  });
   await app.ready();
 
   return {

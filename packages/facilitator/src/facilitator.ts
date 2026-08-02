@@ -1,3 +1,4 @@
+import { BAZAAR } from "@walras/bazaar";
 import { x402Facilitator } from "@x402/core/facilitator";
 import { createEd25519Signer } from "@x402/stellar";
 import { ExactStellarScheme } from "@x402/stellar/exact/facilitator";
@@ -11,13 +12,11 @@ import type { FacilitatorConfig } from "./config.js";
  * 37 machine-readable reason codes doing it. This function's whole job is to translate
  * operator configuration into the scheme's constructor arguments.
  *
- * Two things deliberately *not* wired here:
- *
- *  - **Extensions.** None are registered, so `GET /supported` reports `extensions: []`.
- *    Advertising `bazaar` before the discovery endpoints exist would be exactly the
- *    "advertised vs reachable support" gap the RFP calls out (DECISIONS D-010, D-016).
- *  - **Lifecycle hooks.** No `onAfterVerify` / `onAfterSettle` hooks, because the only
- *    use walras has for them is discovery cataloging, which is not implemented yet.
+ * The `bazaar` extension is registered here, so `GET /supported` advertises it — in
+ * the same change that mounted `GET /discovery/resources` and the settle-time indexing
+ * hook, exactly as DECISIONS D-016 required: never advertised before reachable, and
+ * not left unadvertised once it is. The hook itself lives in the HTTP layer
+ * (server.ts), off the settlement path, per DECISIONS D-015.
  *
  * @param config - Validated facilitator configuration.
  * @returns A facilitator core ready to serve verify, settle, and supported.
@@ -44,5 +43,5 @@ export function buildFacilitator(config: FacilitatorConfig): x402Facilitator {
     ...(feeBumpSigner === undefined ? {} : { feeBumpSigner }),
   });
 
-  return new x402Facilitator().register(config.network, scheme);
+  return new x402Facilitator().register(config.network, scheme).registerExtension(BAZAAR);
 }

@@ -15,7 +15,8 @@ Apache-2.0. Built against the pinned spec commit
 | Facilitator — `POST /verify`, `POST /settle`, `GET /supported` on `stellar:testnet` | built |
 | Stock-client conformance — unmodified `@x402/fetch` buyer paid an unmodified `@x402/express` seller through walras; settled on `stellar:testnet` | **proven** — tx [`ac50c091…cc155`](https://stellar.expert/explorer/testnet/tx/ac50c0910b3484ae6f2b070f35a95d1062dd3269cd4f877434dbcf2d7d3cc155), EVIDENCE S2-2/S2-3 |
 | x402 repo e2e suite against walras (`--families=stellar --testnet`) | **4/4 pass** — EVIDENCE S2-4 |
-| Bazaar catalog, discovery endpoints, search, MCP | not built |
+| Bazaar catalog — settle-gated automatic cataloging (`EXTENSION-RESPONSES`) + `GET /discovery/resources` (seven filters, offset pagination) | **proven live** — stock seller's resource cataloged by paying, no registration step; hostile extensions soft-dropped with machine reasons while settlement succeeds on-chain; EVIDENCE S3-3/S3-4 |
+| Bazaar search (`/discovery/search`), MCP live demo | not built (S4/S5) |
 
 The facilitator wraps [`@x402/stellar`](https://www.npmjs.com/package/@x402/stellar)'s
 `ExactStellarScheme`, which already enforces every MUST in the exact-Stellar scheme spec.

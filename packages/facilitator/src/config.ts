@@ -31,7 +31,7 @@ export const DEFAULT_PORT = 4021;
  */
 export const DEFAULT_MAX_TRANSACTION_FEE_STROOPS = 50_000;
 
-/** Default path for the discovery catalog store. Reserved; unused until the catalog ships. */
+/** Default path for the discovery catalog store (SQLite, WAL; DECISIONS D-023). */
 export const DEFAULT_DB_PATH = "./data/catalog.db";
 
 /**
@@ -68,7 +68,7 @@ export interface FacilitatorConfig {
   readonly port: number;
   /** Facilitator fee posture. */
   readonly feeMode: FeeMode;
-  /** Filesystem path for the discovery catalog store. Reserved; not opened yet. */
+  /** Filesystem path for the discovery catalog store, or ":memory:" for tests. */
   readonly dbPath: string;
   /** Settlement-fee safety ceiling in stroops, passed through to the payment scheme. */
   readonly maxTransactionFeeStroops: number;

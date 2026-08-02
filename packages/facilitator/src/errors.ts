@@ -95,6 +95,8 @@ export const WALRAS_REASON_CODES = [
   "walras_unsupported_kind",
   /** No route is mounted at the requested method and path. */
   "walras_unknown_route",
+  /** A discovery query parameter could not be interpreted (e.g. non-numeric limit). */
+  "walras_invalid_query_parameter",
   /** Unhandled fault inside the wrapper. Never a statement about the payment. */
   "walras_internal_error",
 ] as const;
@@ -206,7 +208,9 @@ export const REASON_TEXT: Record<ReasonCode, string> = {
   walras_unsupported_kind:
     "The (scheme, network) pair is not advertised by this facilitator. See GET /supported.",
   walras_unknown_route:
-    "No route is mounted at this method and path. This facilitator serves POST /verify, POST /settle, GET /supported, and GET /health.",
+    "No route is mounted at this method and path. This facilitator serves POST /verify, POST /settle, GET /supported, GET /discovery/resources, and GET /health.",
+  walras_invalid_query_parameter:
+    "A query parameter could not be interpreted. limit and offset must be non-negative integers; filter parameters must not repeat.",
   walras_internal_error:
     "The facilitator failed to process the request. This says nothing about the payment's validity.",
 };

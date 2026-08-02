@@ -10,7 +10,8 @@
   },
   "scripts": {
     "seller": "tsx seller.ts",
-    "buyer": "tsx buyer.ts"
+    "buyer": "tsx buyer.ts",
+    "hostile": "tsx hostile-client.ts"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.2.0",
@@ -18,7 +19,8 @@
     "@x402/express": "2.20.0",
     "@x402/fetch": "2.20.0",
     "@x402/stellar": "2.20.0",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "@x402/extensions": "2.20.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.23",

@@ -1,8 +1,8 @@
 {
-  "name": "@walras/facilitator",
+  "name": "@walras/bazaar",
   "version": "0.1.0",
   "private": true,
-  "description": "x402 facilitator for stellar:testnet — POST /verify, POST /settle, GET /supported",
+  "description": "Bazaar discovery catalog for the walras facilitator — settle-gated indexing and spec-shaped browsing",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -13,20 +13,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json",
-    "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js",
     "test": "vitest run"
   },
   "dependencies": {
-    "@stellar/stellar-sdk": "^16.2.0",
     "@x402/core": "2.20.0",
-    "@x402/stellar": "2.20.0",
-    "fastify": "^5.6.1",
-    "@walras/bazaar": "workspace:*"
+    "@x402/extensions": "2.20.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
-    "tsx": "^4.21.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }

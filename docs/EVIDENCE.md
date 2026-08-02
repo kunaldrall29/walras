@@ -1176,11 +1176,191 @@ RFP 3.6 requirement — non-null reason on every rejection — holds in all thre
 
 ---
 
+## S3-1 — Session 3 pre-flight gates and verification reads (2026-08-02)
+
+### G3.1 — Session 2 state reproducible
+
+`pnpm test` at session start: **76/76 pass** (5 files), unchanged from the S2 close.
+EVIDENCE S2-1 … S2-6 present; FACTS Q-011/Q-004 CLOSED.
+
+### G3.2 — Q-001 tables present
+
+FACTS rows confirmed in place before any code: F-025 (seven filters + defaults),
+F-031 (service-metadata soft-drop), F-030 (routeTemplate: percent-decode **before**
+`..`/`://` checks), F-024 (EXTENSION-RESPONSES: base64 JSON, `status` ∈
+success|processing|rejected, `rejectedReason` optional, header itself a MAY),
+F-029 (MCP tuple keying MUST).
+
+### Verification reads before implementing (method rule 3)
+
+1. `specs/extensions/bazaar.md` re-read in full at `17fc9890…` (589 lines).
+2. `typescript/packages/extensions/src/bazaar/*` read at the SHA — produced F-072
+   (the one-shot extractor is not a trust boundary) and confirmed F-048's helper list.
+3. Reference e2e catalog (`e2e/facilitators/typescript/bazaar.ts`) read — confirms
+   D-009 (keys on URL alone, violating the MCP tuple MUST; walras does not copy it).
+4. Live probe: `node:sqlite` on the pinned Node v24.14.0 — `DatabaseSync` works,
+   `PRAGMA journal_mode=WAL` returns `wal` on a file-backed DB, module emits
+   `ExperimentalWarning` (F-070, D-023).
+5. License gate for the one new dependency: `@x402/extensions@2.20.0` is Apache-2.0;
+   its transitive deps are MIT/Apache-2.0/Unlicense. Full-tree re-scan after install:
+   `GATE G-LIC: PASS — no copyleft or undeclared licenses in tree` (F-071).
+
+---
+
+## S3-2 — Unit + poisoning suites (2026-08-02)
+
+`pnpm test` across the workspace after the build: **132/132 pass** —
+`@walras/bazaar` 45 tests (2 files), `@walras/facilitator` 87 tests (6 files, one new:
+`test/discovery.test.ts`).
+
+Trust-boundary cases proven in-process (all against the real store; the facilitator-level
+cases drive the real `ExactStellarScheme` through the Soroban RPC double, D-017):
+
+- **Trivial-schema attack**: client-authored `schema: {type:"object"}` + garbage
+  `info.input.type` passes Ajv (the client wrote the schema) and is rejected by the
+  protocol-invariant check → `bazaar_spec_validation_failed`. This is why the indexer
+  composes the SDK's helpers instead of calling `extractDiscoveryInfo` (F-072).
+- **routeTemplate traversal**: `%2e%2e`, `..`, `://`, and no-leading-`/` templates are
+  field-dropped (percent-decode first, F-030) and the listing lands under the concrete
+  path — soft-drop, never rejection.
+- **Service-metadata soft-drop** (F-031): 33-char serviceName dropped, loopback-IP
+  iconUrl dropped, tags case-insensitively deduped and capped at 5 — listing survives.
+- **Write poisoning** (D-024): a listing owned by payTo A cannot be created over,
+  overwritten, or partially modified by a settled payment to payTo B — verified at the
+  store layer, the indexer layer, and over HTTP; original listing byte-identical after
+  the attempt.
+- **The D-015 invariant test**: with a deliberately broken store injected, `POST /settle`
+  still returns `success: true` with a 64-hex hash and **no** EXTENSION-RESPONSES header
+  (a walras fault is never reported as a client rejection).
+- **MCP tuple keying** (F-029): same URL holds an HTTP listing and two MCP tool listings
+  as three distinct rows.
+
+---
+
+## S3-3 — Live flow on `stellar:testnet`: settle → automatic catalog entry (2026-08-02)
+
+### Topology
+
+walras facilitator (`dist`, port 4021, fresh empty catalog DB) ← stock `@x402/express`
+seller (port 4022) ← stock `@x402/fetch` buyer. The seller's only S3 change is the
+route-config declaration — stock `declareDiscoveryExtension` plus `description`,
+`mimeType`, `serviceName: "Walras Demo Weather"`, `tags: ["weather","demo"]`; the stock
+middleware auto-registers `bazaarResourceServerExtension` itself. **No registration call
+exists anywhere in the demo.**
+
+Pre-state: `/supported` now advertises `extensions: ["bazaar"]` (D-016 satisfied in the
+same change that mounted the endpoint); `/discovery/resources` returns
+`{x402Version:2, items:[], pagination:{limit:20, offset:0, total:0}}`.
+
+The seller's 402 `PAYMENT-REQUIRED` header decodes to the full bazaar extension with the
+method-narrowed schema (`enum: ["GET"]`) and the service metadata on `resource` — spec
+shape exactly.
+
+### The payment, and the catalog entry it created
+
+Stock buyer output:
+
+```json
+{ "status": 200, "body": { "report": "sunny", "temperatureC": 31 },
+  "paymentResponse": { "success": true,
+    "payer": "GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK",
+    "transaction": "81c4baac7e7766610a945b56abfac7b0893d75f54f3e6f32fd8113b471b99b3f",
+    "network": "stellar:testnet" } }
+```
+
+The **stock seller middleware** parsed walras's settle response header and logged, verbatim:
+
+```
+[x402] extension responses: {"bazaar":{"status":"success"}}
+```
+
+`GET /discovery/resources` immediately after — one item, no registration step having
+occurred:
+
+```json
+{ "resource": "http://127.0.0.1:4022/weather", "type": "http", "x402Version": 2,
+  "accepts": [{ "scheme": "exact", "network": "stellar:testnet",
+    "asset": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+    "amount": "100000", "payTo": "GD7JFO5L4WP7FGRFB33ATR5NJF2FWSC5FTOAKCAYWUMIBMNHFURKNI3R",
+    "maxTimeoutSeconds": 300, "extra": { "areFeesSponsored": true } }],
+  "lastUpdated": "2026-08-02T20:23:53.505Z",
+  "description": "Live weather report for the walras demo city",
+  "mimeType": "application/json", "serviceName": "Walras Demo Weather",
+  "tags": ["weather", "demo"], "extensions": { "bazaar": { … full info + schema … } } }
+```
+
+`accepts` is the verified requirements of the settled payment; the input/output schemas
+and per-parameter descriptions ride in `extensions.bazaar`. Filtered queries return the
+same item for `type=http`, `payTo=<seller>`, `scheme=exact`, `network=stellar:testnet`,
+`extensions=bazaar` (all seven filters exercised, D-005); `limit=abc` gets
+`400 {"error":{"code":"walras_invalid_query_parameter", …}}`.
+
+Live catalog DB confirmed in `journal_mode: wal` with the single row
+`(resource, type='http', tool_name='', owner_pay_to=<seller>)` (F-029 keying).
+
+---
+
+## S3-4 — Live hostile client: soft-drop with reason, settlement untouched (2026-08-02)
+
+Both cases use [demo/hostile-client.ts](../demo/hostile-client.ts): the *payment* is
+produced by the stock client path and is honest; the echoed `resource`/`extensions` are
+tampered after signing and POSTed straight to `/settle` — the exact threat model the spec
+names for the facilitator trust boundary.
+
+### 1. Garbage extension (trivial-schema attack), paying the legitimate seller
+
+Settlement **succeeded on-chain** — tx
+`af1bcbfaa885e01ccaa0d12dfbeeb1bd39ef967e163a0d005665e420e534bd82` — while the
+extension was soft-dropped with machine code and human reason in one header:
+
+```json
+{ "bazaar": { "status": "rejected",
+  "rejectedReason": "The discovery info violates the bazaar protocol invariants. info.input.type must be \"http\" or \"mcp\", got \"garbage\"",
+  "code": "bazaar_spec_validation_failed" } }
+```
+
+Catalog after: unchanged (1 listing, the seller's own).
+
+### 2. Poisoning attempt: real settled payment, wrong payee
+
+The attacker paid **itself** 0.01 USDC (a structurally valid self-transfer the payment
+scheme correctly settles) while claiming the seller's URL with a *well-formed* extension.
+Settlement succeeded — tx
+`66da73958ad3b20fc327c7baac763d693d926de7c15121fd9e742d2440a042d4`, payer = attacker —
+and the catalog write was refused:
+
+```json
+{ "bazaar": { "status": "rejected",
+  "rejectedReason": "This resource is already cataloged for a different payment recipient; a listing can only be updated by payments to its original payTo.",
+  "code": "bazaar_listing_owned_by_other_payee" } }
+```
+
+Catalog after: the seller's listing intact, `description` unchanged, accepts payTo set =
+`{<seller>}` only; `?payTo=<attacker>` returns `total: 0`. **A real, settled payment was
+not sufficient to touch another seller's listing** (D-024).
+
+### On-chain verification and accounting
+
+All three S3 transactions verified successful on Horizon:
+
+| tx | ledger | fee (stroops) | note |
+|---|---|---|---|
+| `81c4baac…9b3f` | 3936498 | 22 973 | stock buyer → seller (cataloged) |
+| `af1bcbfa…bd82` | 3936505 | 22 973 | garbage-mode payment → seller (soft-dropped) |
+| `66da7395…42d4` | 3936510 | 18 374 | poison-mode self-transfer (soft-dropped) |
+
+The two seller payments charge exactly the F-069 fee (22 973); the self-transfer's
+smaller footprint prices lower — fees remain simulation-derived per F-037. USDC exact:
+buyer 19.979 → **19.959** (two 0.01 payments; self-transfer net zero), seller
+0.021 → **0.041**. The facilitator held USDC at no point.
+
+---
+
 ## Not yet captured
 
 | Section | Blocked on |
 |---|---|
-| **S3 Discovery / poisoning tests** | S3 implementation. |
-| **S4 Search eval metrics** | S4 implementation. |
+| **S4 Search endpoint + eval metrics** | S4 implementation (`/discovery/search` is deliberately 404 until then, D-016 logic). |
 | **S5 Demo run + recording** | S5. |
 | **Fee-bump settlement by walras** | Config only (`FEE_BUMP_SECRET` + a funded fee account); knob shipped and unit-tested in S1. See D-021. |
+| **MCP tool cataloged from a live MCP seller** | Tuple keying is store/indexer-proven (S3-2); a live MCP seller demo is S5 scope. |
