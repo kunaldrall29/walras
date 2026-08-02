@@ -728,16 +728,459 @@ assertion.
 
 ---
 
+## S2-1 — Session 2 pre-flight gates (2026-08-02)
+
+### G2.1 — facilitator boots clean
+
+`pnpm install --frozen-lockfile` (no changes), `pnpm build` clean, `pnpm test`:
+
+```
+ Test Files  5 passed (5)
+      Tests  76 passed (76)
+```
+
+Boot from the built `dist`, verbatim:
+
+```
+{"level":30,...,"msg":"Server listening at http://127.0.0.1:4021"}
+{"level":30,...,"network":"stellar:testnet","rpcUrl":"https://soroban-testnet.stellar.org",
+ "submitters":["GATIEPZCNFNIORFMN3YYTBEPJDELAFX4TDKBXLUIBFHDNGEXXBKICWWI"],
+ "feeBumpAddress":null,"port":4021,"feeMode":"free","dbPath":"./data/catalog.db",
+ "maxTransactionFeeStroops":50000,"msg":"walras facilitator ready"}
+```
+
+`GET /supported` (live): one kind `{x402Version:2, scheme:"exact", network:"stellar:testnet",
+extra:{areFeesSponsored:true}}`, `extensions: []` (D-016), one signer under `stellar:*`.
+
+### G2.2 — accounts funded (the Q-011 blocker cleared)
+
+Horizon, pre-payment:
+
+| Account | XLM | USDC |
+|---|---|---|
+| buyer `GACCDS…H4WK` | 9999.99999 | **20.0000000** (Circle faucet, received 2026-08-02T09:23:00Z) |
+| seller `GD7JFO…NI3R` | 9999.99999 | 0 (trustline present) |
+| facilitator `GATIEP…CWWI` | 10000 | — (no trustline, by design — F-006) |
+
+USDC is the SAC verified four ways in S0-3 (Q-007, F-052).
+
+---
+
+## S2-2 — The stock-client round-trip (Q-011 CLOSED, 2026-08-02)
+
+### Topology
+
+Two transparent HTTP taps ([demo/tap.mjs](../demo/tap.mjs)) sit *between* the components and
+log every exchange verbatim (casing preserved via `rawHeaders`). Neither the buyer, the
+seller, nor the facilitator is modified or aware of them:
+
+```
+buyer (@x402/fetch, stock) ──► :4030 tap ──► :4022 seller (@x402/express, stock)
+                                             seller ──► :4031 tap ──► :4021 walras facilitator
+```
+
+- Seller: [demo/seller.ts](../demo/seller.ts) — stock `paymentMiddleware` + `x402ResourceServer`
+  + `HTTPFacilitatorClient` + server-side `ExactStellarScheme`; one route `GET /weather`,
+  `price: "$0.01"` (chosen so the settled transfer is 100000 base units — identical to the
+  baseline settlement decoded in S0-4).
+- Buyer: [demo/buyer.ts](../demo/buyer.ts) — stock `wrapFetchWithPayment` +
+  `x402Client().register("stellar:*", new ExactStellarScheme(createEd25519Signer(...)))`.
+  Line-for-line the Stellar subset of `e2e/clients/fetch/index.ts` @ pinned SHA.
+  **Zero custom protocol code.**
+
+### Buyer ↔ seller transcript (tap at :4030)
+
+**Exchange 1 — unpaid request → 402.**
+
+```
+GET /weather
+> host: 127.0.0.1:4030
+> accept: */*
+> user-agent: node
+
+HTTP 402
+< Content-Type: application/json; charset=utf-8
+< PAYMENT-REQUIRED: eyJ4NDAyVmVyc2lvbiI6Miwi… (528 b64 chars)
+< Content-Length: 2
+body: {}
+```
+
+`PAYMENT-REQUIRED`, base64-decoded:
+
+```json
+{
+  "x402Version": 2,
+  "error": "Payment required",
+  "resource": { "url": "http://127.0.0.1:4030/weather", "description": "", "mimeType": "" },
+  "accepts": [{
+    "scheme": "exact",
+    "network": "stellar:testnet",
+    "amount": "100000",
+    "asset": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+    "payTo": "GD7JFO5L4WP7FGRFB33ATR5NJF2FWSC5FTOAKCAYWUMIBMNHFURKNI3R",
+    "maxTimeoutSeconds": 300,
+    "extra": { "areFeesSponsored": true }
+  }]
+}
+```
+
+(Note `maxTimeoutSeconds: 300` — the `@x402/express` middleware default, not the scheme
+spec's example value of 60 from F-034. The client derives the auth-entry expiry from it.)
+
+**Exchange 2 — paid retry → 200.**
+
+```
+GET /weather
+> host: 127.0.0.1:4030
+> PAYMENT-SIGNATURE: eyJ4NDAyVmVyc2lvbiI6MiwicGF5bG9hZCI6… (2332 b64 chars)
+> Access-Control-Expose-Headers: PAYMENT-RESPONSE,X-PAYMENT-RESPONSE
+> accept: */*
+> user-agent: node
+
+HTTP 200
+< Content-Type: application/json; charset=utf-8
+< PAYMENT-RESPONSE: eyJzdWNjZXNzIjp0cnVlLCJwYXllciI6… (256 b64 chars)
+body: {"report":"sunny","temperatureC":31}
+```
+
+`PAYMENT-SIGNATURE`, decoded (transaction XDR elided):
+
+```json
+{
+  "x402Version": 2,
+  "payload": { "transaction": "AAAAAgAAAAAAAAAA… (1352 b64 chars, single invokeHostFunction)" },
+  "resource": { "url": "http://127.0.0.1:4030/weather", "description": "", "mimeType": "" },
+  "accepted": { …identical to the accepts[0] above… }
+}
+```
+
+`PAYMENT-RESPONSE`, decoded:
+
+```json
+{
+  "success": true,
+  "payer": "GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK",
+  "transaction": "ac50c0910b3484ae6f2b070f35a95d1062dd3269cd4f877434dbcf2d7d3cc155",
+  "network": "stellar:testnet"
+}
+```
+
+### Seller ↔ facilitator transcript (tap at :4031)
+
+| # | at (UTC) | Exchange | Result |
+|---|---|---|---|
+| 1 | 19:07:24 | `GET /supported` (resource-server startup validation) | 200, the S2-1 body |
+| 2 | 19:07:44 | `POST /verify` — body `{x402Version:2, paymentPayload, paymentRequirements}` (2062 chars, spec §7.1 shape) | 200 `{"isValid":true,"payer":"GACCDS…H4WK"}` |
+| 3 | 19:07:46 | `POST /settle` — same body | 200 (at 19:07:54) `{"success":true,"transaction":"ac50c091…cc155","network":"stellar:testnet","payer":"GACCDS…H4WK"}` |
+
+Settle wall-time ≈ 7 s: fresh verification + simulation + submission + confirmation (F-036).
+
+### Stock buyer stdout, verbatim
+
+```json
+{
+  "status": 200,
+  "body": { "report": "sunny", "temperatureC": 31 },
+  "paymentResponse": {
+    "success": true,
+    "payer": "GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK",
+    "transaction": "ac50c0910b3484ae6f2b070f35a95d1062dd3269cd4f877434dbcf2d7d3cc155",
+    "network": "stellar:testnet"
+  }
+}
+```
+
+**Finding — wire header names.** The v2 exchange uses `PAYMENT-REQUIRED` /
+`PAYMENT-SIGNATURE` / `PAYMENT-RESPONSE`, not F-057's `X-PAYMENT` / `X-PAYMENT-RESPONSE`.
+The pinned spec (`specs/transports-v2/http.md` §Header Reference) names the `PAYMENT-*`
+triple as canonical for v2, and `x402HTTPClient.encodePaymentSignatureHeader` switches on
+`x402Version`: case 2 → `PAYMENT-SIGNATURE`, case 1 → `X-PAYMENT`. F-057 was a v1 reading.
+→ FACTS F-065, DECISIONS D-018. Not a bug on either side of this transcript.
+
+---
+
+## S2-3 — walras's first on-chain settlement, verified (Q-008 cross-check, 2026-08-02)
+
+Horizon, `GET /transactions/ac50c091…cc155`:
+
+```
+successful      : true
+ledger          : 3935588
+created_at      : 2026-08-02T19:07:53Z
+source_account  : GATIEPZCNFNIORFMN3YYTBEPJDELAFX4TDKBXLUIBFHDNGEXXBKICWWI
+fee_account     : GATIEPZCNFNIORFMN3YYTBEPJDELAFX4TDKBXLUIBFHDNGEXXBKICWWI
+fee_charged     : 22973 stroops = 0.0022973 XLM
+max_fee         : 33253 → (ours) 33153
+operation_count : 1
+```
+
+Operation: `invoke_host_function` → `transfer`, asset balance change
+`0.0100000 USDC` from `GACCDSSZ…` (buyer) to `GD7JFO5L…` (seller) — 100000 base units,
+identical in shape and amount to the baseline settlement decoded in S0-4.
+
+**stellar.expert**: `https://stellar.expert/explorer/testnet/tx/ac50c0910b3484ae6f2b070f35a95d1062dd3269cd4f877434dbcf2d7d3cc155`
+resolves (HTTP 200), and `api.stellar.expert/explorer/testnet/tx/<hash>` returns the record
+(ledger 3935588, protocol 27) with matching envelope XDR.
+
+### Fee, cross-checked against Q-008
+
+Every walras settlement this session charged **exactly 22 973 stroops** (12 of 12).
+The x402.org baseline (F-054) charges 23 073 in its dominant cluster —
+**exactly 100 stroops more**. The baseline settles through a fee-bump transaction
+(F-055); a fee bump pays for (inner operations + 1), and one base-fee unit is 100 stroops.
+The delta is precisely the fee-bump's own operation fee. The RFP's "about 0.0023 XLM"
+(§2) holds for walras too. Observed `max_fee` 33 153, ~1.5× under the 50 000 ceiling (F-037).
+
+### Balance accounting, exact to the stroop
+
+After the demo payment and all ten e2e settlements (S2-4):
+
+| Account | Before | After | Δ |
+|---|---|---|---|
+| buyer USDC | 20.0000000 | 19.9790000 | −0.021 = 1×0.01 (demo) + 11×0.001 (e2e) |
+| seller USDC | 0 | 0.0210000 | +0.021 — every base unit arrived |
+| facilitator XLM | 10000.0000000 | 9999.9724324 | −0.0275676 = **12 × 22 973 stroops** |
+
+The facilitator paid every network fee and touched no USDC — the non-custodial,
+fee-sponsoring property, now observed for **our own** operator rather than the reference one.
+
+---
+
+## S2-4 — The x402 repo e2e suite against walras (Q-004 run leg CLOSED, 2026-08-02)
+
+### Setup
+
+Per F-056, the suite lives at `e2e/` in the pinned clone. walras is exposed to the harness
+as an external-proxy facilitator — a `test.config.json` + `run.sh` that exec's our **built,
+unmodified** `packages/facilitator/dist/index.js`, mapping the harness env contract
+(`STELLAR_PRIVATE_KEY` → `SUBMITTER_SECRET`, `STELLAR_NETWORK` → `NETWORK`,
+`STELLAR_RPC_URL` → `RPC_URL`, `PORT` passthrough). Env: the three Stellar variables from
+F-056 plus structurally-valid throwaway EVM/SVM keys, never funded — the stock client and
+server construct EVM/SVM signers unconditionally at startup even when only Stellar is
+exercised.
+
+Invocation (programmatic mode, the suite's own filter mechanism):
+
+```
+pnpm test --facilitators=walras --servers=express,hono --clients=fetch,axios \
+          --families=stellar --testnet
+```
+
+### Result: 4/4 scenarios pass — full output
+
+```
+🚀 Starting X402 E2E Test Suite
+===============================
+
+🤖 Programmatic Mode
+===================
+
+Active filters:
+  - facilitators: walras
+  - servers: express, hono
+  - clients: fetch, axios
+  - protocolFamilies: stellar
+
+🌐 Network Mode: TESTNET
+   STELLAR: Stellar Testnet (stellar:testnet)
+   [EVM/SVM/APTOS/CCD/HEDERA/KEETA/TVM/NEAR/XRPL defaults printed but unused]
+
+✅ 4 scenarios selected
+
+🔍 Validating facilitator environment variables...
+  ✅ All required environment variables are present
+
+🏛️ Starting facilitator: walras on port 4024
+⏳ Waiting for all facilitators to be ready...
+  ✅ Facilitator walras ready at http://localhost:4024
+🎭 Starting mock facilitator on port 4025...
+  ✅ Mock facilitator ready at http://localhost:4025
+
+🔧 Server/Facilitator combinations: 2
+   • express + walras: 2 test(s)
+   • hono + walras: 2 test(s)
+
+[combo-0 express+walras] 🚀 Starting server: express (port 4022) with facilitator: walras
+[combo-0 express+walras]   ✅ Server express ready
+[combo-0 express+walras] 🧪 Test #1: axios → express → /exact/stellar via walras
+[combo-0 express+walras]   ✅ Test passed
+[combo-0 express+walras] 🧪 Test #2: fetch → express → /exact/stellar via walras
+[combo-0 express+walras]   ✅ Test passed
+[combo-1 hono+walras] 🚀 Starting server: hono (port 4023) with facilitator: walras
+[combo-1 hono+walras]   ✅ Server hono ready
+[combo-1 hono+walras] 🧪 Test #3: axios → hono → /exact/stellar via walras
+[combo-1 hono+walras]   ✅ Test passed
+[combo-1 hono+walras] 🧪 Test #4: fetch → hono → /exact/stellar via walras
+[combo-1 hono+walras]   ✅ Test passed
+
+📊 Test Summary
+==============
+🌐 Network: testnet
+✅ Passed: 4
+❌ Failed: 0
+📈 Total: 4
+⏱️  Duration: 2.99 min
+
+📋 Detailed Test Results
+========================
+
+✅ PASSED TESTS:
+
+  # 1: axios → express → /exact/stellar
+      Facilitator: walras
+      Network: stellar:testnet
+      Tx: 6fbef5730ba0ae96913f694cc787ea7294e8f2abc9c7aedaeefbaa183f5f061e
+  # 2: fetch → express → /exact/stellar
+      Facilitator: walras
+      Network: stellar:testnet
+      Tx: ea4923f0aaf8115d1a2bbe331a89e67caf3d6b65597bf9f265f46ae403e78d1b
+  # 3: axios → hono → /exact/stellar
+      Facilitator: walras
+      Network: stellar:testnet
+      Tx: 7a0fcbaea7735b2d46010e4d2136e89e210554ae7056a7aa545adc85d52777f8
+  # 4: fetch → hono → /exact/stellar
+      Facilitator: walras
+      Network: stellar:testnet
+      Tx: ea26e506615b5444f76bf41ec2afe31fc0b49f0a45bde92cc71bab3c07bc3f44
+
+📊 Breakdown by Facilitator:
+ walras          ✅ 4 / ❌ 0 (100%)
+📊 Breakdown by Server:
+ express              ✅ 2 / ❌ 0 (100%)
+ hono                 ✅ 2 / ❌ 0 (100%)
+📊 Breakdown by Client:
+   axios                ✅ 2 / ❌ 0 (100%)
+   fetch                ✅ 2 / ❌ 0 (100%)
+```
+
+All four transaction hashes verified on Horizon: `successful=true`, ledgers
+3935947 / 3935952 / 3935965 / 3935969, `fee_charged=22973` each, source `GATIEPZC…`
+(walras). An earlier single-scenario run (`--servers=express --clients=fetch`) also passed
+1/1 with tx `3453b6880ec0d1cdfe0dc86c75e811a3ca5455d57227eff85f396c4bf2725da9`, and the
+first full-matrix attempt settled two further express payments before failing on the
+fastify defect below — 11 e2e settlements total, all accounted for in S2-3.
+
+### Two harness defects found at the pinned SHA (neither is a walras bug)
+
+**(1) The mock facilitator omits `batch-settlement`.** The harness starts a mock
+facilitator whose stated contract (its own header comment) is that it "claims to support
+all schemes/networks", existing precisely so servers whose routes exceed the real
+facilitator's kinds can still boot. Its `evmSchemes` list is `["exact", "upto"]` —
+`batch-settlement` is missing — while the express/fastify/hono e2e servers configure
+`batch-settlement` EVM routes unconditionally. Consequence: with **any** external
+facilitator that is not a full EVM facilitator, the server's route validation throws
+`RouteConfigurationError` on first request and the client sees an HTML 500 instead of a
+402. Running against the bundled reference facilitator masks the gap because that
+facilitator supports `batch-settlement` natively. Fix applied locally (one line, in test
+scaffolding only — not in any stock client, server, SDK package, or walras):
+
+```diff
+-  const evmSchemes = ["exact", "upto"];
++  const evmSchemes = ["exact", "upto", "batch-settlement"];
+```
+
+**(2) The fastify e2e server never wires the mock fallback.** `express`, `hono`, and
+`next` all read `MOCK_FACILITATOR_URL` and append the mock as a fallback facilitator
+client; `servers/fastify/index.ts` does not reference it at all. It therefore cannot start
+against any single-family facilitator, mock or no mock (both clients failed against it
+with the same server-side 500; recorded in `logs/walras-stellar-s2-matrix2.log`, 4/6 pass
+with only the two fastify scenarios failing). fastify was excluded from the final matrix
+rather than patched — modifying a server component under test crosses the line that a
+scaffolding fix does not. Both defects are upstream-reportable → DECISIONS D-019, D-020.
+
+---
+
+## S2-5 — Diff against the Session 0 x402.org baseline (2026-08-02)
+
+What Session 0 captured from the baseline operator: `/supported` (S0-2) and settled
+transaction anatomy (S0-4). A baseline 402/PAYMENT-SIGNATURE transcript does not exist —
+Q-011 was blocked precisely because no funded stock client existed then — so the wire legs
+are diffed against the pinned spec and SDK source, per D-010's framing.
+
+| Dimension | walras (observed S2) | Baseline / normative source | Verdict |
+|---|---|---|---|
+| `/supported` Stellar kind | `{x402Version:2, scheme:"exact", network:"stellar:testnet", extra:{areFeesSponsored:true}}` | Identical, byte-for-byte field-wise (S0-2, F-041) | **identical** |
+| `/supported.signers` | `{"stellar:*": [1 address]}` | Same shape, 2 addresses (F-041) | count = operator config; shape identical |
+| `/supported.extensions` | `[]` | `["builder-code","eip2612GasSponsoring","erc20ApprovalGasSponsoring"]` | deliberate — D-016: advertise only what is reachable; baseline's entries are EVM-only features walras does not serve |
+| 402 headers | `PAYMENT-REQUIRED` (v2) | `specs/transports-v2/http.md` canonical | **matches spec**; F-057 corrected (D-018) |
+| Payment header | `PAYMENT-SIGNATURE` | same source | **matches spec** |
+| Receipt header | `PAYMENT-RESPONSE` | same source | **matches spec** |
+| `/verify` request/response | §7.1 envelope; `{isValid, payer}` | spec §7.1; SDK `HTTPFacilitatorClient` | **matches** |
+| `/settle` response | `{success, transaction(64-hex), network, payer}` | spec §Phase 3 (F-038) | **matches** |
+| Settled op anatomy | 1 op, `invoke_host_function` → `transfer(from,to,i128)`, USDC SAC `CBIELTK6…` | identical (S0-4) | **identical** |
+| Settlement fee | 22 973 stroops | 23 073 stroops | Δ = exactly 100 stroops = the fee-bump operation's base fee — see next row |
+| Fee account | `source_account == fee_account` | `source ≠ fee_account` (fee-bump, F-055) | config, not wire shape: `FEE_BUMP_SECRET` unset this session; the knob exists and is spec-optional → D-021 |
+| Payer in responses | client address, never facilitator | same (F-038) | **identical** |
+
+**Zero unexplained differences.** Each divergence is either byte-identical, an explained
+operator-configuration difference, or a Session 0 fact-error corrected at source
+(F-057 → F-065).
+
+---
+
+## S2-6 — Negative live tests: each rejected with a non-null reason (2026-08-02)
+
+All three run against the live facilitator on `stellar:testnet` with real payloads produced
+by the stock client path. No stock component was modified.
+
+### 1. Replayed payload → `/settle`
+
+The exact settle body that produced `ac50c091…` (captured on the wire at the facilitator
+tap) was POSTed to `/settle` a second time, verbatim:
+
+```
+HTTP/1.1 200 OK
+{"success":false,"network":"stellar:testnet","transaction":"",
+ "errorReason":"invalid_exact_stellar_payload_simulation_failed",
+ "payer":"GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK",
+ "errorMessage":"Re-simulation of the transaction against current ledger state did not succeed."}
+```
+
+D-011's claim — replay resistance is structural, enforced by Soroban nonce consumption and
+surfaced through mandatory re-simulation — is now **demonstrated live**, with the consumed
+nonce of a real prior settlement.
+
+### 2. Amount mismatch → `/verify`
+
+The captured verify body with `paymentRequirements.amount` changed `"100000"` → `"200000"`
+(payload untouched):
+
+```
+HTTP/1.1 200 OK
+{"isValid":false,"invalidReason":"invalid_exact_stellar_payload_wrong_amount",
+ "payer":"GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK",
+ "invalidMessage":"The transfer amount does not equal paymentRequirements.amount exactly."}
+```
+
+A structural check, reachable **before** simulation — consistent with F-064's ordering.
+
+### 3. Expired auth entry → `/verify` and `/settle`
+
+A payload was produced by the stock client assembly path
+(`x402Client.createPaymentPayload` → client `ExactStellarScheme`;
+[demo/negative-payload.ts](../demo/negative-payload.ts)) against the same requirements with
+`maxTimeoutSeconds: 15`, giving `signatureExpirationLedger = 3935653` at creation ledger
+3935650. After the chain passed ledger 3935657 (beyond the bound *plus* the package's
+2-ledger tolerance, F-046), both endpoints rejected it:
+
+```
+POST /verify  → {"isValid":false,"invalidReason":"invalid_exact_stellar_payload_simulation_failed", …}
+POST /settle  → {"success":false,"errorReason":"invalid_exact_stellar_payload_simulation_failed", …}
+```
+
+As F-064 predicted, on live testnet the expired case collapses into
+`…_simulation_failed` — the Soroban host itself refuses the expired auth entry during
+simulation, and the package's own expiry-bound code (`invalid_exact_stellar_signature_expiration_too_far`)
+sits *after* simulation and is only observable against the RPC double (S1-4). The
+RFP 3.6 requirement — non-null reason on every rejection — holds in all three cases, live.
+
+---
+
 ## Not yet captured
 
 | Section | Blocked on |
 |---|---|
-| **Stock-client transcript** (Q-011) | A buyer account holding testnet USDC. The only documented funding path is the **captcha-gated Circle faucet** (faucet.circle.com, select Stellar) — not automatable. Friendbot (XLM) and trustline creation are automatable; the USDC leg is not. |
-| **A settlement by walras on-chain** | Same. S1-4's successful settlement is modelled; S0-4 decodes a real one, but that one is the reference operator's, not ours. |
-| **Live discrimination of the tampered payload** | Same. S1-4 discriminates it against the RPC double; live testnet cannot until simulation can succeed. |
-| **S2 Conformance** | Same — a stock client needs a funded buyer. |
 | **S3 Discovery / poisoning tests** | S3 implementation. |
 | **S4 Search eval metrics** | S4 implementation. |
 | **S5 Demo run + recording** | S5. |
-
-Fund one testnet account with USDC and the first five rows close together.
+| **Fee-bump settlement by walras** | Config only (`FEE_BUMP_SECRET` + a funded fee account); knob shipped and unit-tested in S1. See D-021. |

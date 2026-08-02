@@ -13,6 +13,8 @@ Apache-2.0. Built against the pinned spec commit
 | Component | State |
 | --- | --- |
 | Facilitator — `POST /verify`, `POST /settle`, `GET /supported` on `stellar:testnet` | built |
+| Stock-client conformance — unmodified `@x402/fetch` buyer paid an unmodified `@x402/express` seller through walras; settled on `stellar:testnet` | **proven** — tx [`ac50c091…cc155`](https://stellar.expert/explorer/testnet/tx/ac50c0910b3484ae6f2b070f35a95d1062dd3269cd4f877434dbcf2d7d3cc155), EVIDENCE S2-2/S2-3 |
+| x402 repo e2e suite against walras (`--families=stellar --testnet`) | **4/4 pass** — EVIDENCE S2-4 |
 | Bazaar catalog, discovery endpoints, search, MCP | not built |
 
 The facilitator wraps [`@x402/stellar`](https://www.npmjs.com/package/@x402/stellar)'s
@@ -73,6 +75,20 @@ reserved for requests that could not be interpreted as an x402 exchange at all.
 `SUBMITTER_SECRET` is the only required variable. The full table, including `FEE_MODE`,
 `DB_PATH`, and the fee-bump options, is in
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §3.5 and [`.env.example`](./.env.example).
+
+## Demo
+
+[`demo/`](./demo) holds the Session 2 acceptance case: a minimal seller wired from stock
+`@x402/express` and a buyer wired from stock `@x402/fetch` — zero custom protocol code on
+either side. With the facilitator running and `.env` populated:
+
+```bash
+pnpm --filter @walras/demo seller    # :4022, pays out to SERVER_STELLAR_ADDRESS
+pnpm --filter @walras/demo buyer     # pays 0.01 USDC, prints the settled tx hash
+```
+
+`demo/tap.mjs` is a transparent logging proxy used to capture the wire transcripts in
+EVIDENCE S2-2; `demo/e2e-proxy/` exposes walras to the x402 repo's e2e harness.
 
 ## Development
 

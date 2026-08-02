@@ -289,3 +289,85 @@ observed on-chain**, in EVIDENCE and in the code. It is not a Soroban VM: no bal
 footprints, no nonce consumption — so it can never substitute for the live round-trip Q-011
 still requires. Retire nothing on its evidence; when Q-011 closes, the same fixtures should be
 replayed against live RPC and the results compared.
+
+**S2 follow-up:** Q-011 closed and the live replay happened (EVIDENCE S2-6). Live results
+match the double's predictions exactly where the two overlap: `wrong_amount` fires
+pre-simulation, and both the replayed and the expired payload collapse to
+`…_simulation_failed` live — confirming that the double remains the only way to exercise
+the post-simulation codes (F-064). The double is vindicated, not retired.
+
+---
+
+## D-018 — The v2 wire headers are `PAYMENT-*`. F-057 was a v1 reading.
+**Status:** ADOPTED (FACTS correction) · 2026-08-02 · Evidence: F-065, EVIDENCE S2-2
+
+Session 0 recorded (F-057) the request header as `X-PAYMENT` and the receipt as
+`X-PAYMENT-RESPONSE`, sourced from `x402HTTPClient.ts` L98/L151. The live S2 transcript —
+stock client on both sides — used `PAYMENT-REQUIRED`, `PAYMENT-SIGNATURE`, and
+`PAYMENT-RESPONSE`. Re-reading the same file shows a version switch F-057 missed:
+`x402Version === 2` → `PAYMENT-SIGNATURE`; `x402Version === 1` → `X-PAYMENT`. The pinned
+spec (`specs/transports-v2/http.md` §Header Reference) names the `PAYMENT-*` triple as the
+canonical v2 transport, and `X-PAYMENT-RESPONSE` survives only as the client's v1 fallback
+read.
+
+**Decision:** F-065 supersedes F-057; F-057 stays in FACTS marked superseded, scoped to v1.
+No code changes anywhere — the facilitator never sees these headers (they are
+client↔seller transport), and both stock sides already conform. The lesson recorded: a
+FACTS row sourced from code must capture the *dispatch condition*, not just the string at a
+line number.
+
+---
+
+## D-019 — The e2e mock facilitator breaks its own contract; one-line scaffolding fix.
+**Status:** UPSTREAM · 2026-08-02 · Evidence: F-068, EVIDENCE S2-4
+
+The e2e harness boots a mock facilitator whose documented purpose is to "claim to support
+all schemes/networks" so servers whose routes exceed the real facilitator's kinds can still
+start. At the pinned SHA its `evmSchemes` is `["exact", "upto"]` — no `batch-settlement` —
+while every TypeScript e2e server configures `batch-settlement` EVM routes unconditionally.
+Any external facilitator that is not a full EVM facilitator therefore kills the server with
+`RouteConfigurationError` before a single payment runs. The bundled reference facilitator
+masks the bug by supporting `batch-settlement` itself.
+
+**Decision:** fix the scaffolding locally (add `"batch-settlement"` to `evmSchemes` —
+one line, aligning the mock with its own stated contract) and report upstream with the
+reproduction. The stop-condition line is drawn explicitly: mock scaffolding may be aligned
+with its documented contract; **stock clients, servers, SDK packages, and the facilitator
+under test are never patched**. Without this fix the suite cannot evaluate *any*
+single-family external facilitator — precisely walras's category — so the fix is a
+precondition of the RFP's own acceptance path, not a convenience.
+
+---
+
+## D-020 — The fastify e2e server cannot run against single-family facilitators. Excluded, not patched.
+**Status:** UPSTREAM · 2026-08-02 · Evidence: F-068, EVIDENCE S2-4
+
+`servers/express`, `servers/hono`, and `servers/next` all read `MOCK_FACILITATOR_URL` and
+attach the mock as a fallback facilitator client. `servers/fastify/index.ts` never
+references it, so its route validation sees only the real facilitator's kinds and throws
+for every non-EVM operator — both stock clients failed against it with the same
+server-side 500 while express and hono passed 4/4 (matrix run recorded in S2-4).
+
+**Decision:** exclude fastify from the S2 matrix rather than wire the mock into it. Unlike
+D-019's mock, the fastify server is a component under test — patching it would change what
+the suite measures. Report upstream alongside D-019 (same root theme: the external-proxy
+path is under-exercised because CI always runs the all-family reference facilitator).
+
+---
+
+## D-021 — S2 ran single-signer without fee-bump; the measured cost of that choice is exactly 100 stroops.
+**Status:** PROVISIONAL · 2026-08-02 · Refines D-012 · Evidence: EVIDENCE S2-3
+
+D-012 adopted "multiple signers plus a `feeBumpSigner` from the start". Session 2
+deliberately ran the minimal posture instead — one submitter, `FEE_BUMP_SECRET` unset — so
+the first live round-trip had the fewest moving parts. Two consequences, both now measured:
+`source_account == fee_account` on every walras settlement (baseline: decoupled, F-055),
+and `fee_charged` = 22 973 stroops vs the baseline's 23 073 — a delta of exactly one
+base-fee unit, which is the fee-bump operation's own fee. Nothing about the wire protocol
+differs; the fee-bump is spec-optional.
+
+**Decision:** stand up the fee-bump account and a second submitter as configuration before
+S3's throughput demonstration (the knob shipped in S1 and is unit-tested; EVIDENCE
+"Not yet captured" tracks it). D-012's substance is unchanged — this entry records that S2
+knowingly deferred it and what deferring it cost: 100 stroops per settlement, in the
+operator's favour.

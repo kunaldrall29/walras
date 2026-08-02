@@ -112,7 +112,7 @@ Evidence transcripts: `docs/EVIDENCE.md`. Divergence log: `docs/DECISIONS.md`.
 | F-054 | **Measured settlement fee on `stellar:testnet`: 23 073 stroops = 0.0023073 XLM**, observed repeatedly across the x402.org facilitator's settlements (a second cluster at 20 654 stroops = 0.0020654 XLM). The RFP's "about 0.0023 XLM" (§2) is confirmed to two significant figures by live measurement. Observed `max_fee` 33 253 — only ~1.5× headroom under the 50 000-stroop default ceiling (F-037). | VERIFIED | 2026-08-02 | EVIDENCE §S0-4 |
 | F-055 | The x402.org Stellar facilitator settles using a **fee-bump transaction with a separate fee account** (`source_account` = GC6CSXBV…, `fee_account` = GC5OLUZ4…), i.e. it uses the package's `feeBumpSigner` path in production. | VERIFIED | 2026-08-02 | EVIDENCE §S0-4 |
 | F-056 | e2e suite lives at `e2e/`, run with `pnpm install:all` then `pnpm test` (interactive selector) or `pnpm test --min`. Stellar env vars: `SERVER_STELLAR_ADDRESS`, `CLIENT_STELLAR_PRIVATE_KEY`, `FACILITATOR_STELLAR_PRIVATE_KEY`; facilitator process also reads `STELLAR_PRIVATE_KEY`, `STELLAR_NETWORK` (default `stellar:testnet`), `STELLAR_RPC_URL`. Requires Node ≥ 22. Setup path: Stellar Lab keypair + Friendbot → USDC trustline via lab.stellar.org/account/fund → **Circle faucet** (faucet.circle.com, select Stellar) for testnet USDC. | VERIFIED | 2026-08-02 | `e2e/README.md` L120-226; `e2e/package.json` |
-| F-057 | Wire header names, from SDK source: request `X-PAYMENT`; payment response `X-PAYMENT-RESPONSE` (the offer-receipt extension also accepts bare `PAYMENT-RESPONSE` as a fallback); facilitator→server `EXTENSION-RESPONSES`. | VERIFIED | 2026-08-02 | `core/src/http/x402HTTPClient.ts` L98,151; `core/src/http/httpFacilitatorClient.ts` L262; `extensions/src/offer-receipt/client.ts` L178 |
+| F-057 | ~~Wire header names: request `X-PAYMENT`; payment response `X-PAYMENT-RESPONSE`~~ **SUPERSEDED by F-065** — these are the **v1** names only; the SDK switches on `x402Version` and Session 0 read the v1 branch. `EXTENSION-RESPONSES` (facilitator→server) remains correct. | SUPERSEDED | 2026-08-02 | D-018; F-065 |
 | F-058 | Toolchain pinned: Node **v24.14.0** (local) — but `@x402/stellar` and the e2e suite both declare `engines.node >= 22`; pnpm **10.32.1**; npm 11.9.0; git 2.53.0. All `@x402/*` packages at **2.20.0**, Apache-2.0. | VERIFIED | 2026-08-02 | G0.1 capture; `npm view`; EVIDENCE §S0-1 |
 | F-059 | `@x402/stellar@2.20.0` requires `@stellar/stellar-sdk: ^16.0.1` and `@x402/core: ~2.20.0`. Pinning `@stellar/stellar-sdk` at `^14` produces a **duplicate SDK in the tree** (14.6.1 + 16.2.0) and the settle path's fee arithmetic is written against v16 semantics. We must pin `^16`. | VERIFIED | 2026-08-02 | `node_modules/@x402/stellar/package.json`; EVIDENCE §S0-5; `scheme.ts` L253 comment |
 | F-060 | **Q-010 license scan PASS.** 294 distinct packages across the full planned dependency set: 249 MIT, 17 Apache-2.0, 14 ISC, 8 BSD-3-Clause, 2 BSD-2-Clause, 3 permissive dual/multi, 1 Unlicense. **Zero AGPL/SSPL/OSL/EUPL/CPAL/RPL. Zero GPL/LGPL/MPL/CDDL/EPL. Zero undeclared.** | VERIFIED | 2026-08-02 | EVIDENCE §S0-5 |
@@ -124,7 +124,17 @@ Evidence transcripts: `docs/EVIDENCE.md`. Divergence log: `docs/DECISIONS.md`.
 |---|---|---|---|---|
 | F-062 | `gatherAuthEntrySignatureStatus` classifies an auth entry as signed purely by testing that its signature `ScVal` is **not** `scvVoid` — it performs **no cryptographic verification**. A forged or corrupted signature is therefore invisible to every check `@x402/stellar` makes on its own, and is caught only by the Soroban host during simulation. This is why "simulation MUST succeed" (F-035) is load-bearing rather than defence-in-depth: it is the sole control against a forged authorization. | VERIFIED | 2026-08-02 | `mechanisms/stellar/src/shared.ts` L117-126 @ SHA; demonstrated EVIDENCE S1-4 |
 | F-063 | The 37 reason codes of F-045 are present **in the published npm artifact** of `@x402/stellar@2.20.0` (`dist/esm/exact/facilitator/index.mjs`), not only in the source tree S0-6 read. The enumeration is asserted against the installed bundle by `packages/facilitator/test/errors.test.ts`, so an upstream rename breaks the build rather than degrading a rejection reason silently. | VERIFIED | 2026-08-02 | EVIDENCE S1-5 |
-| F-064 | The verification step ordering in `ExactStellarScheme._verify` places auth-entry checks (expiry bound, credential type, sub-invocations, signature status) and transfer-event checks **after** `simulateTransaction`. Consequently, on a network where simulation cannot succeed, those codes are unreachable and every payload collapses to `invalid_exact_stellar_payload_simulation_failed`. Structural checks (version, scheme, network, operation shape, asset, function name, recipient, amount, facilitator safety) all precede simulation and remain reachable. | VERIFIED | 2026-08-02 | `scheme.ts` L385-551 @ SHA; EVIDENCE S1-3, S1-4 |
+| F-064 | The verification step ordering in `ExactStellarScheme._verify` places auth-entry checks (expiry bound, credential type, sub-invocations, signature status) and transfer-event checks **after** `simulateTransaction`. Consequently, on a network where simulation cannot succeed, those codes are unreachable and every payload collapses to `invalid_exact_stellar_payload_simulation_failed`. Structural checks (version, scheme, network, operation shape, asset, function name, recipient, amount, facilitator safety) all precede simulation and remain reachable. **Confirmed live in S2**: expired and replayed payloads both surface as `…_simulation_failed`; `wrong_amount` fires pre-simulation. | VERIFIED | 2026-08-02 | `scheme.ts` L385-551 @ SHA; EVIDENCE S1-3, S1-4, S2-6 |
+
+### Session 2 — live conformance on stellar:testnet
+
+| ID | Claim | Status | Date | Source |
+|---|---|---|---|---|
+| F-065 | **v2 canonical wire headers are `PAYMENT-REQUIRED` (402), `PAYMENT-SIGNATURE` (paid request), `PAYMENT-RESPONSE` (receipt)** — named canonical in `specs/transports-v2/http.md` §Header Reference and emitted by `x402HTTPClient.encodePaymentSignatureHeader` when `x402Version === 2`. `X-PAYMENT`/`X-PAYMENT-RESPONSE` are the v1 names (v1 emit branch; v1 fallback read). Observed live, casing as-sent, on the S2 transcript. Supersedes F-057. | VERIFIED | 2026-08-02 | spec @ SHA; `x402HTTPClient.ts` L90-156; EVIDENCE S2-2 |
+| F-066 | **An unmodified stock client completed a payment end-to-end through the walras facilitator** on `stellar:testnet`: `@x402/fetch` buyer + `@x402/express` seller (both stock, zero custom protocol code), settled tx `ac50c0910b3484ae6f2b070f35a95d1062dd3269cd4f877434dbcf2d7d3cc155` (ledger 3935588, successful, verified on Horizon and stellar.expert), 0.01 USDC buyer→seller, payer = buyer address. Full wire transcript captured by transparent taps. **Q-011 closed.** Note: the `@x402/express` middleware defaults `maxTimeoutSeconds` to 300, not the scheme spec's illustrative 60 (F-034 derivation unchanged). | VERIFIED | 2026-08-02 | EVIDENCE S2-2, S2-3 |
+| F-067 | **The repo e2e suite passes against walras**: `--facilitators=walras --families=stellar --testnet` with servers {express, hono} × clients {fetch, axios} = **4/4 pass**, each with a real on-chain settlement (hashes in EVIDENCE S2-4, all verified on Horizon). walras ran as an external-proxy facilitator exec'ing the unmodified built dist. 11 e2e settlements total this session; every one charged exactly 22 973 stroops. | VERIFIED | 2026-08-02 | EVIDENCE S2-4; `e2e/logs/walras-stellar-s2-final.*` |
+| F-068 | Two e2e-harness defects at the pinned SHA, both invisible when the bundled all-family reference facilitator runs: (a) the mock facilitator omits `batch-settlement` from `evmSchemes` despite its stated claim-everything contract, killing every TS server's route validation under a non-EVM external facilitator; (b) `servers/fastify` never reads `MOCK_FACILITATOR_URL`, so it cannot start against any single-family facilitator at all. (a) fixed locally in scaffolding (one line); (b) excluded from the matrix. Both upstream-reportable. | VERIFIED | 2026-08-02 | `e2e/mock-facilitator/index.ts` L28; `grep MOCK_FACILITATOR_URL e2e/servers/*/index.ts`; EVIDENCE S2-4 |
+| F-069 | **Measured walras settlement fee: 22 973 stroops = 0.0022973 XLM, uniform across all 12 S2 settlements** (max_fee 33 153). Exactly **100 stroops below** the x402.org baseline's dominant cluster (23 073, F-054) — the delta is the baseline's fee-bump operation's own base fee (a fee bump pays for inner ops + 1). Q-008 cross-check closed: the RFP's "about 0.0023 XLM" holds for walras. Balance accounting exact: buyer −0.021 USDC, seller +0.021 USDC, facilitator −0.0275676 XLM = 12 × 22 973 stroops, and the facilitator held USDC at no point. | VERIFIED | 2026-08-02 | EVIDENCE S2-3; Horizon |
 
 ---
 
@@ -137,30 +147,25 @@ Evidence transcripts: `docs/EVIDENCE.md`. Divergence log: `docs/DECISIONS.md`.
 | Q-001 | bazaar.md shapes, filters, search, MCP keying, soft-drop, routeTemplate | **CLOSED** | F-023 … F-032 |
 | Q-002 | scheme_exact_stellar payload format + validation requirements | **CLOSED** | F-033 … F-039 |
 | Q-003 | `/supported` response incl. `extra.areFeesSponsored` | **CLOSED** | F-040 … F-043 (spec + live) |
-| Q-004 | e2e suite location, stellar:testnet invocation, env vars | **CLOSED (docs)** | F-056. Local run still blocked — see Q-011. |
+| Q-004 | e2e suite location, stellar:testnet invocation, env vars | **CLOSED** | F-056 (docs); F-067 (local run, 4/4 pass against walras). |
 | Q-005 | `@x402/stellar` facilitator surface; package vs wrapper validation split | **CLOSED** | F-044 … F-047 |
 | Q-006 | facilitator-side cataloging helpers in `@x402/extensions` | **CLOSED — expectation was wrong** | F-048 … F-051 |
 | Q-007 | Testnet USDC issuer + SAC contract ID, on-chain | **CLOSED** | F-052 (4 independent checks) |
 | Q-008 | Actual settlement fee on testnet | **CLOSED** | F-054 (live measurement, 0.0023073 XLM) |
 | Q-009 | Custom `__check_auth` account support (P1) | **PARTIAL** | Spec states auth-entry signing "supports both C-accounts and G-accounts" and mandates `sorobanCredentialsAddress` credentials. Contract-account signature semantics not yet traced. Deferred — P1, proposal-only. |
 | Q-010 | Dependency license scan | **CLOSED — PASS** | F-060 |
-| Q-011 | Live stock-client 402 → payment → settle transcript | **OPEN — BLOCKED** | See below. |
+| Q-011 | Live stock-client 402 → payment → settle transcript | **CLOSED** | F-066 (full transcript, settled tx, on-chain verification). |
 | Q-012 | Pin toolchain + `@x402/*` versions | **CLOSED** | F-058, F-059 |
 | Q-013 | Wire header names/casing | **CLOSED** | F-057 (from SDK source, stronger than a transcript for casing) |
 
-### Q-011 — the one row that did not close, and why
+### Q-011 — closed in Session 2
 
-A full 402 → `X-PAYMENT` → settle transcript needs a buyer account holding **testnet USDC**. The only funding path documented by the x402 repo (F-056) is the **Circle faucet at faucet.circle.com**, which is interactive and captcha-gated — it cannot be driven from this session. Friendbot (XLM) and trustline creation are both automatable; the USDC leg is not.
-
-Everything Q-011 was meant to establish that *could* be sourced elsewhere has been:
-- `/supported` shape and live Stellar values → F-041, F-042, F-043 (live capture).
-- Header names and casing → F-057 (SDK source).
-- Real settlement fee → F-054 (measured from the public facilitator's own on-chain settlements).
-- Settled-transaction anatomy → EVIDENCE §S0-4 decodes a real x402 settlement end to end.
-
-What remains genuinely unproven is the **round-trip through a stock client**, which is the S2 acceptance case anyway. It is not a blocker for S1.
-
-**To unblock:** fund one testnet account with USDC at faucet.circle.com (select Stellar), then Q-011 and the local e2e run (Q-004) both close. Nothing else is needed.
+The blocker resolved exactly as predicted: the buyer account was funded with 20 testnet
+USDC via the captcha-gated Circle faucet (received 2026-08-02T09:23:00Z on-chain), and both
+Q-011 and the Q-004 local run closed in the same session. The round-trip evidence is
+EVIDENCE S2-2/S2-3 (stock client, full transcript, settled tx `ac50c091…cc155`); the e2e
+run is S2-4. One Session 0 fact did not survive contact with the live wire: the header
+names in F-057 were the v1 branch — corrected by F-065 / D-018.
 
 ---
 
@@ -172,3 +177,4 @@ What remains genuinely unproven is the **round-trip through a stock client**, wh
 | 2026-08-02 | Materialized into repo. Pinned spec SHA `17fc9890…` written into header (G0.2). RFP captured verbatim to `docs/rfp.md` (G0.3). | Claude session S0 |
 | 2026-08-02 | Session 0 verification: added F-023 … F-061 from pinned spec, package source, live capture, and on-chain measurement. Closed Q-001 … Q-008, Q-010, Q-012, Q-013. Q-011 blocked on captcha-gated USDC faucet; Q-009 partial (P1). | Claude session S0 |
 | 2026-08-02 | Session 1 build: monorepo scaffold + `packages/facilitator`. Added F-062 … F-064 from package source and the published artifact. Added DECISIONS D-016 (do not advertise `bazaar` before it is reachable) and D-017 (test against a Soroban RPC double; label its results as modelled). Evidence S1-1 … S1-5. **Q-011 unchanged — still OPEN and still the only blocker on a live round-trip.** | Claude session S1 |
+| 2026-08-02 | Session 2 conformance: buyer funded (Circle faucet) → **Q-011 and Q-004 CLOSED**. Stock `@x402/fetch` buyer paid a stock `@x402/express` seller through walras; tx `ac50c091…cc155` verified on Horizon + stellar.expert. Repo e2e suite **4/4** against walras (express, hono × fetch, axios). Negative live tests (replay, amount mismatch, expired auth) each rejected with non-null reasons. Added F-065 … F-069; F-057 superseded (v1 headers). DECISIONS D-018 … D-021. Two upstream e2e-harness defects recorded (F-068). Evidence S2-1 … S2-6. | Claude session S2 |
