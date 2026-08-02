@@ -1,0 +1,23 @@
+# Secrets — never commit. Testnet keys are disposable but still treated as secrets.
+.env
+.env.*
+!.env.example
+
+# Dependencies / build
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Catalog store (SQLite + WAL sidecars)
+*.db
+*.db-wal
+*.db-shm
+data/
+
+# Logs, coverage, OS noise
+*.log
+npm-debug.log*
+pnpm-debug.log*
+coverage/
+.DS_Store
