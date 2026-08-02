@@ -118,6 +118,14 @@ Evidence transcripts: `docs/EVIDENCE.md`. Divergence log: `docs/DECISIONS.md`.
 | F-060 | **Q-010 license scan PASS.** 294 distinct packages across the full planned dependency set: 249 MIT, 17 Apache-2.0, 14 ISC, 8 BSD-3-Clause, 2 BSD-2-Clause, 3 permissive dual/multi, 1 Unlicense. **Zero AGPL/SSPL/OSL/EUPL/CPAL/RPL. Zero GPL/LGPL/MPL/CDDL/EPL. Zero undeclared.** | VERIFIED | 2026-08-02 | EVIDENCE §S0-5 |
 | F-061 | Package version drift is fast and real: `@x402/*` moved **2.17.0 → 2.20.0 in the two days** between the 2026-07-31 fact-check and 2026-08-02. The pinned spec SHA is dated 2026-08-01, one day before this session. The RFP's "drift, not inability, is the failure mode" (§4) is empirically supported. | VERIFIED | 2026-08-02 | F-001 vs F-058 |
 
+### Session 1 — from package source and the published artifact
+
+| ID | Claim | Status | Date | Source |
+|---|---|---|---|---|
+| F-062 | `gatherAuthEntrySignatureStatus` classifies an auth entry as signed purely by testing that its signature `ScVal` is **not** `scvVoid` — it performs **no cryptographic verification**. A forged or corrupted signature is therefore invisible to every check `@x402/stellar` makes on its own, and is caught only by the Soroban host during simulation. This is why "simulation MUST succeed" (F-035) is load-bearing rather than defence-in-depth: it is the sole control against a forged authorization. | VERIFIED | 2026-08-02 | `mechanisms/stellar/src/shared.ts` L117-126 @ SHA; demonstrated EVIDENCE S1-4 |
+| F-063 | The 37 reason codes of F-045 are present **in the published npm artifact** of `@x402/stellar@2.20.0` (`dist/esm/exact/facilitator/index.mjs`), not only in the source tree S0-6 read. The enumeration is asserted against the installed bundle by `packages/facilitator/test/errors.test.ts`, so an upstream rename breaks the build rather than degrading a rejection reason silently. | VERIFIED | 2026-08-02 | EVIDENCE S1-5 |
+| F-064 | The verification step ordering in `ExactStellarScheme._verify` places auth-entry checks (expiry bound, credential type, sub-invocations, signature status) and transfer-event checks **after** `simulateTransaction`. Consequently, on a network where simulation cannot succeed, those codes are unreachable and every payload collapses to `invalid_exact_stellar_payload_simulation_failed`. Structural checks (version, scheme, network, operation shape, asset, function name, recipient, amount, facilitator safety) all precede simulation and remain reachable. | VERIFIED | 2026-08-02 | `scheme.ts` L385-551 @ SHA; EVIDENCE S1-3, S1-4 |
+
 ---
 
 ## Verification queue — status after Session 0
@@ -163,3 +171,4 @@ What remains genuinely unproven is the **round-trip through a stock client**, wh
 | 2026-07-31 | Initial population from RFP fact-check (web-verified) + verification queue | Kunal / Claude session |
 | 2026-08-02 | Materialized into repo. Pinned spec SHA `17fc9890…` written into header (G0.2). RFP captured verbatim to `docs/rfp.md` (G0.3). | Claude session S0 |
 | 2026-08-02 | Session 0 verification: added F-023 … F-061 from pinned spec, package source, live capture, and on-chain measurement. Closed Q-001 … Q-008, Q-010, Q-012, Q-013. Q-011 blocked on captcha-gated USDC faucet; Q-009 partial (P1). | Claude session S0 |
+| 2026-08-02 | Session 1 build: monorepo scaffold + `packages/facilitator`. Added F-062 … F-064 from package source and the published artifact. Added DECISIONS D-016 (do not advertise `bazaar` before it is reachable) and D-017 (test against a Soroban RPC double; label its results as modelled). Evidence S1-1 … S1-5. **Q-011 unchanged — still OPEN and still the only blocker on a live round-trip.** | Claude session S1 |

@@ -246,3 +246,46 @@ conformant.
 runs off that path, and its outcome only ever decorates the response with a header. A broken indexer
 degrades discovery and never payments. Add a test that asserts settlement succeeds while the
 catalog store is forced to fail.
+
+---
+
+## D-016 — Do not advertise `bazaar` in `/supported.extensions` until it is reachable.
+**Status:** ADOPTED · 2026-08-02 · Evidence: F-042 · Refines D-010
+
+D-010's corollary says walras "should list `bazaar` in its own `/supported.extensions`, which
+would make it the reachable Stellar Bazaar the RFP asks for". Session 1 ships the payment
+endpoints only — no catalog, no discovery endpoints. Listing `bazaar` now would advertise an
+extension with nothing behind it.
+
+That is precisely the failure D-010 criticises x402.org for the inverse of: the RFP's
+"advertised vs reachable support" caution cuts both ways, and over-advertising is the worse
+direction because a client that believes the advertisement gets a 404 rather than a considered
+fallback.
+
+**Decision:** `extensions: []` while no extension is implemented; register `BAZAAR` and let it
+appear in `/supported` in the same change that mounts `GET /discovery/resources`. The
+`/supported` test asserts the empty array today so the omission is deliberate and visible,
+rather than an oversight nobody notices.
+
+---
+
+## D-017 — Test the payment path against a Soroban RPC double, and label its results as modelled.
+**Status:** ADOPTED · 2026-08-02 · Evidence: F-035, Q-011
+
+`ExactStellarScheme` orders its checks so that expiry bounds, signature status,
+sub-invocations, and transfer-event validation all run *after* `simulateTransaction`
+succeeds. Simulation cannot succeed against live testnet until a buyer holds testnet USDC —
+the one thing Q-011 is blocked on. Run against the real network, every negative fixture
+collapses into the same `invalid_exact_stellar_payload_simulation_failed`, and a green suite
+would demonstrate nothing about the codes past that point.
+
+The alternative to a double is to assert only what is reachable pre-simulation, which leaves
+the tampered-payload case — the one the session's own acceptance criteria names — untested.
+
+**Decision:** run the fixture suite against an in-process JSON-RPC double that verifies
+auth-entry signatures against the real CAP-46 preimage and synthesizes transfer events from
+the transaction actually submitted. **Label every result obtained through it as modelled, not
+observed on-chain**, in EVIDENCE and in the code. It is not a Soroban VM: no balances, no
+footprints, no nonce consumption — so it can never substitute for the live round-trip Q-011
+still requires. Retire nothing on its evidence; when Q-011 closes, the same fixtures should be
+replayed against live RPC and the results compared.

@@ -338,14 +338,406 @@ re-verifying against a future SHA. → FACTS F-045, DECISIONS D-007.
 
 ---
 
+## S1-1 — Session 1 pre-flight gates (2026-08-02)
+
+### G1.1 — FACTS gate (G-FACTS)
+
+Implementation may not start while any P0 row is OPEN. Read from the verification queue
+above at the start of the session:
+
+```
+Q-001 bazaar.md shapes/filters/search/MCP keying    CLOSED
+Q-002 scheme_exact_stellar payload + validation     CLOSED
+Q-003 /supported incl. extra.areFeesSponsored       CLOSED
+Q-004 e2e suite location, env vars                  CLOSED (docs)
+Q-005 @x402/stellar facilitator surface             CLOSED
+Q-006 facilitator-side cataloging helpers           CLOSED
+Q-012 pinned toolchain + @x402/* versions           CLOSED
+```
+
+**GATE G1.1: PASS.** No STOP condition. Q-011 remains OPEN and Q-009 PARTIAL; neither is
+in the G1.1 set, and neither blocks S1 — see the Q-011 note above.
+
+### G1.2 — install at pinned versions, single SDK, license scan
+
+```
+$ pnpm install
+Packages: +148
+Done in 5.1s using pnpm v10.32.1
+
+$ node -e "..."   # resolved versions in packages/facilitator
+@x402/core               2.20.0       Apache-2.0
+@x402/stellar            2.20.0       Apache-2.0
+@stellar/stellar-sdk     16.2.0       Apache-2.0
+fastify                  5.11.0       MIT
+vitest                   3.2.7        MIT
+typescript               5.9.3        Apache-2.0
+tsx                      4.23.1       MIT
+```
+
+Every version matches the Q-012 pins (F-058, F-059). `@stellar/stellar-sdk` resolves to
+`^16` as D-013 requires, and the duplicate-SDK assertion D-013 asked for now runs as part
+of `pnpm test`:
+
+```
+$ node scripts/check-single-stellar-sdk.mjs
+check:deps PASS — exactly one @stellar/stellar-sdk in the tree (16.2.0)
+```
+
+License scan, re-run against the real repository tree rather than a probe directory
+(`scripts/license-scan.mjs`, the in-repo successor to the Session 0 script):
+
+```
+$ node scripts/license-scan.mjs
+=== G-LIC dependency license scan ===
+total distinct packages: 148
+
+--- license histogram ---
+ 130 MIT
+   7 BSD-3-Clause
+   6 Apache-2.0
+   5 ISC
+
+--- FORBIDDEN (AGPL/SSPL/OSL/EUPL/CPAL/RPL) ---
+  none
+
+--- REVIEW (GPL/LGPL/MPL/CDDL/EPL family) ---
+  none
+
+--- UNKNOWN / undeclared ---
+  none
+
+--- direct @x402/* and @stellar/* ---
+  @stellar/js-xdr@4.0.0            Apache-2.0
+  @stellar/stellar-sdk@16.2.0      Apache-2.0
+  @x402/core@2.20.0                Apache-2.0
+  @x402/stellar@2.20.0             Apache-2.0
+
+GATE G-LIC: PASS — no copyleft or undeclared licenses in tree
+```
+
+**GATE G1.2: PASS.** The tree is 148 packages against Session 0's 294 because the build set
+is narrower than the planned set S0-5 scanned — no `@x402/{express,fetch,mcp}`,
+no `better-sqlite3`, no `express`. Nothing was removed to make the gate pass; those
+packages simply are not dependencies of the facilitator.
+
+### G1.3 — submitter funded, RPC reachable
+
+```
+$ node scripts/preflight.mjs
+== G1.3 preflight ==
+network   : stellar:testnet
+rpc       : https://soroban-testnet.stellar.org
+horizon   : https://horizon-testnet.stellar.org
+
+PASS  submitter secret parses      GATIEPZCNFNIORFMN3YYTBEPJDELAFX4TDKBXLUIBFHDNGEXXBKICWWI
+PASS  rpc reachable                status=healthy latestLedger=3935211
+PASS  submitter account exists     sequence=16872809087107072
+PASS  submitter funded             10000.0000000 XLM (minimum 1)
+INFO  submitter trustlines         none — correct for a fee sponsor
+
+GATE G1.3: PASS
+```
+
+The submitter is the account created in Session 0 (see Accounts, above). It holds XLM and
+no trustline, which is the correct state for an account that sponsors fees and never
+touches the payment asset (F-006).
+
+`scripts/setup-accounts.mjs` was **not** re-run: it generates fresh keypairs on every
+invocation, so re-running it would have replaced the accounts this evidence file records
+rather than confirming them. The check above verifies the recorded account on-chain
+instead, which is the property the gate is actually asking about.
+
+---
+
+## S1-2 — Test suite (2026-08-02)
+
+```
+$ pnpm test
+
+> walras@0.1.0 test
+> pnpm run check:deps && pnpm -r test
+
+check:deps PASS — exactly one @stellar/stellar-sdk in the tree (16.2.0)
+
+ RUN  v3.2.7 /workspaces/walras/packages/facilitator
+
+ ✓ test/settle.test.ts   (16 tests) 3225ms
+ ✓ test/verify.test.ts   (26 tests) 2259ms
+ ✓ test/supported.test.ts (9 tests)  191ms
+ ✓ test/config.test.ts   (16 tests)   61ms
+ ✓ test/errors.test.ts    (9 tests)   16ms
+
+ Test Files  5 passed (5)
+      Tests  76 passed (76)
+   Duration  8.61s
+```
+
+Every negative case asserts **both** that the payment was rejected **and** the specific
+reason code. Fixture-driven verify cases, each mapped to the code it must produce:
+
+| Fixture | Reason code |
+|---|---|
+| `wrongAmount` | `invalid_exact_stellar_payload_wrong_amount` |
+| `wrongAsset` | `invalid_exact_stellar_payload_wrong_asset` |
+| `wrongRecipient` | `invalid_exact_stellar_payload_wrong_recipient` |
+| `facilitatorIsPayer` | `invalid_exact_stellar_payload_facilitator_is_payer` |
+| `facilitatorIsTxSource` | `invalid_exact_stellar_payload_unsafe_tx_or_op_source` |
+| `wrongOperation` | `invalid_exact_stellar_payload_wrong_operation` |
+| `malformedTransaction` | `invalid_exact_stellar_payload_malformed` |
+| `expirationTooFar` | `invalid_exact_stellar_signature_expiration_too_far` |
+| `unsignedAuthEntry` | `invalid_exact_stellar_payload_missing_payer_signature` |
+| `hasSubInvocations` | `invalid_exact_stellar_payload_has_subinvocations` |
+| `noAuthEntries` | `invalid_exact_stellar_payload_no_auth_entries` |
+| `tamperedAuthSignature` | `invalid_exact_stellar_payload_simulation_failed` |
+
+**Provenance of the fixtures.** Session 0 could not capture a real signed payload — a stock
+client cannot build one without a USDC-funded buyer, which is Q-011. These transactions are
+therefore **synthesized, not captured**: real keys, real Ed25519 signatures over the real
+CAP-46 authorization preimage, real XDR, assembled locally by
+`scripts/build-fixtures.mjs` from what Session 0 *did* establish — the accounts above, the
+USDC SAC of S0-3, the payload shape of F-033, the expiry rule of F-034. None has been
+submitted to a network.
+
+Two fixtures are worth naming individually. `facilitatorIsPayer` and `facilitatorIsTxSource`
+are separate MUST NOTs in spec section 4 and the package checks them at different points;
+they are asserted separately so one cannot mask the other, and a third test confirms both
+are refused **before any simulation is attempted** — the fee sponsor is protected without
+the transaction ever touching RPC.
+
+---
+
+## S1-3 — Live transcripts, `stellar:testnet` (2026-08-02)
+
+Facilitator built from this repository, configured against the real Soroban RPC and the
+Session 0 submitter. Captured with `scripts/capture-transcripts.sh`. Responses verbatim,
+headers included.
+
+```
+$ curl -s -i -X GET http://localhost:4021/supported
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+content-length: 209
+
+{"kinds":[{"x402Version":2,"scheme":"exact","network":"stellar:testnet","extra":{"areFeesSponsored":true}}],"extensions":[],"signers":{"stellar:*":["GATIEPZCNFNIORFMN3YYTBEPJDELAFX4TDKBXLUIBFHDNGEXXBKICWWI"]}}
+```
+
+The Stellar kind is byte-identical to what `x402.org/facilitator/supported` advertises
+(S0-2, F-041), including `extra.areFeesSponsored: true`. `extensions` is empty by decision,
+not omission — D-016.
+
+```
+$ curl -s -i -X GET http://localhost:4021/health
+HTTP/1.1 200 OK
+
+{"status":"ok","x402Version":2,"network":"stellar:testnet","rpcUrl":"https://soroban-testnet.stellar.org","submitters":["GATIEPZCNFNIORFMN3YYTBEPJDELAFX4TDKBXLUIBFHDNGEXXBKICWWI"],"feeBumpAddress":null,"port":4021,"feeMode":"free","dbPath":"./data/catalog.db","maxTransactionFeeStroops":50000}
+```
+
+### A payment rejected for a reason attributable entirely to the payload
+
+```
+$ curl -s -i -X POST http://localhost:4021/verify -H 'Content-Type: application/json' -d @verify-wrongAmount.json
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+content-length: 235
+
+{"isValid":false,"invalidReason":"invalid_exact_stellar_payload_wrong_amount","payer":"GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK","invalidMessage":"The transfer amount does not equal paymentRequirements.amount exactly."}
+```
+
+```
+$ curl -s -i -X POST http://localhost:4021/settle -H 'Content-Type: application/json' -d @settle-wrongAmount.json
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+content-length: 276
+
+{"success":false,"network":"stellar:testnet","transaction":"","errorReason":"invalid_exact_stellar_payload_wrong_amount","payer":"GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK","errorMessage":"The transfer amount does not equal paymentRequirements.amount exactly."}
+```
+
+This pair is the load-bearing one. The amount check runs **before** simulation, so the
+rejection is attributable to the payload alone and nothing about the buyer's balance is
+involved. `/settle` reaches the same verdict having been given no prior `/verify` — F-036
+in action, live.
+
+### A well-formed payload, and the honest limit of what live testnet can show
+
+```
+$ curl -s -i -X POST http://localhost:4021/verify -H 'Content-Type: application/json' -d @verify-valid.json
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+content-length: 248
+
+{"isValid":false,"invalidReason":"invalid_exact_stellar_payload_simulation_failed","payer":"GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK","invalidMessage":"Re-simulation of the transaction against current ledger state did not succeed."}
+```
+
+**Read this carefully rather than as a failure.** The payload passed every structural check
+— version, scheme, network, single `invokeHostFunction`, contract equals `asset`, function
+`transfer` with three arguments, recipient equals `payTo`, amount exact, facilitator absent
+from source and payer — and was rejected at the *next* step, simulation. It reached
+simulation, and simulation failed because the buyer `GACCDSSZ…` holds **0 USDC**: the
+transfer would panic. That is Q-011, unchanged.
+
+The consequence is a real limit and it should be stated rather than glossed: **against live
+testnet, a valid payload and a tampered one are indistinguishable** — both return
+`invalid_exact_stellar_payload_simulation_failed`. A transcript that showed only this could
+not honestly claim the tampered case was caught *because it was tampered*. S1-4 addresses
+that; a USDC-funded buyer would remove the need for it.
+
+### Wrapper-level rejections
+
+```
+$ curl -s -i -X POST http://localhost:4021/verify -H 'Content-Type: application/json' -d '{not json'
+HTTP/1.1 400 Bad Request
+content-type: application/json; charset=utf-8
+content-length: 159
+
+{"isValid":false,"invalidReason":"walras_malformed_request_body","invalidMessage":"The request body was absent, was not valid JSON, or was not a JSON object."}
+```
+
+```
+$ curl -s -i -X GET http://localhost:4021/discovery/resources
+HTTP/1.1 404 Not Found
+content-type: application/json; charset=utf-8
+content-length: 182
+
+{"error":{"code":"walras_unknown_route","reason":"No route is mounted at this method and path. This facilitator serves POST /verify, POST /settle, GET /supported, and GET /health."}}
+```
+
+Note the shape of the 400: it is a `VerifyResponse`, not a bare `{error: …}`. The stock
+`HttpFacilitatorClient` parses non-2xx bodies and raises a `VerifyError` carrying
+`invalidReason` when it finds `isValid` — any other shape would drop the machine-readable
+code at that boundary.
+
+---
+
+## S1-4 — Modelled transcripts via the Soroban RPC double (2026-08-02)
+
+**These results are modelled, not observed on-chain.** The facilitator here runs against an
+in-process JSON-RPC double, not testnet; no transaction below exists on any ledger. Read
+S0-4 for what a real settlement looks like. Rationale and limits: DECISIONS D-017,
+ARCHITECTURE §4.1.
+
+The double verifies auth-entry signatures for real — Ed25519 over the CAP-46 authorization
+preimage, the same bytes `authorizeEntry` signs — and synthesizes the SEP-41 transfer event
+from the invocation actually present in the transaction. It models no balances, no
+footprints, and no nonce consumption.
+
+```
+$ curl -s -i -X POST http://localhost:4031/verify -H 'Content-Type: application/json' -d @verify-valid.json
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+content-length: 83
+
+{"isValid":true,"payer":"GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK"}
+```
+
+```
+$ curl -s -i -X POST http://localhost:4031/settle -H 'Content-Type: application/json' -d @settle-valid.json
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+content-length: 192
+
+{"success":true,"transaction":"b8547f87bc3b1fd40d1b586efb84fcc4e11f40d698897ebbf89dc2741723f2ee","network":"stellar:testnet","payer":"GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK"}
+```
+
+The response satisfies F-038: a 64-character hex hash, and `payer` is the client
+`GACCDSSZ…`, never the submitter. The hash is the genuine hash of the envelope the
+facilitator built and signed — it is simply the hash of a transaction that was never
+broadcast.
+
+### The tampered payload, now discriminated
+
+```
+$ curl -s -i -X POST http://localhost:4031/verify -H 'Content-Type: application/json' -d @verify-tamperedAuthSignature.json
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+content-length: 248
+
+{"isValid":false,"invalidReason":"invalid_exact_stellar_payload_simulation_failed","payer":"GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK","invalidMessage":"Re-simulation of the transaction against current ledger state did not succeed."}
+```
+
+Same environment, same requirements, one bit of the payer's signature flipped — accepted
+above, rejected here. The facilitator process log carries the underlying cause:
+
+```
+Simulation error: : HostError: Error(Auth, InvalidAction): signature verification failed for GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK
+```
+
+**A finding worth recording.** The tampered entry is structurally perfect and passes every
+check `@x402/stellar` performs on its own: `gatherAuthEntrySignatureStatus` asks whether a
+signature is *present*, not whether it *verifies* (`shared.ts` L120, pinned SHA). Catching
+a forged signature is the Soroban host's job during simulation — which is exactly why
+"simulation MUST succeed" is itself a spec MUST (F-035). The mandatory-simulation rule is
+not belt-and-braces; it is the only thing standing between a facilitator and a forged
+authorization.
+
+```
+$ curl -s -i -X POST http://localhost:4031/settle -H 'Content-Type: application/json' -d @settle-tamperedAuthSignature.json
+HTTP/1.1 200 OK
+
+{"success":false,"network":"stellar:testnet","transaction":"","errorReason":"invalid_exact_stellar_payload_simulation_failed","payer":"GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK","errorMessage":"Re-simulation of the transaction against current ledger state did not succeed."}
+```
+
+### The expiry bound
+
+```
+$ curl -s -i -X POST http://localhost:4031/verify -H 'Content-Type: application/json' -d @verify-expirationTooFar.json
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+content-length: 276
+
+{"isValid":false,"invalidReason":"invalid_exact_stellar_signature_expiration_too_far","payer":"GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK","invalidMessage":"An authorization entry expires beyond currentLedger + ceil(maxTimeoutSeconds / estimatedLedgerSeconds)."}
+```
+
+An auth entry expiring 5 000 ledgers out, against `maxTimeoutSeconds: 60`. Note this
+rejection sits **after** simulation in the package's ordering, which is why it is
+unreachable without the double while Q-011 is open.
+
+The submitter address differs from S1-3 (`GAV5SY2V…` rather than `GATIEPZC…`) because the
+fixtures are built against a disposable account derived from a fixed phrase — the
+facilitator-safety cases need the facilitator's own address inside a transaction, and using
+the real submitter would make the test suite depend on a gitignored secret.
+
+---
+
+## S1-5 — Reason-code drift check (2026-08-02)
+
+D-007 commits walras to inheriting the package's 37 codes verbatim rather than inventing a
+parallel taxonomy. That commitment is only worth anything if it is checked, so
+`test/errors.test.ts` greps the **installed** bundle and fails on any difference:
+
+```
+$ grep -oE '"(invalid|unsupported|unexpected|network|settle|verification)[a-z0-9_]*"' \
+    node_modules/@x402/stellar/dist/esm/exact/facilitator/index.mjs | sort -u | wc -l
+37
+```
+
+The 37 codes recovered from the shipped bundle match the enumeration in
+`packages/facilitator/src/errors.ts` exactly — which also independently re-confirms F-045
+against the published artifact rather than against the source tree S0-6 read.
+
+Since `@x402/*` moved 2.17.0 → 2.20.0 in two days (F-061), an upgrade that adds or renames
+a code now breaks the build instead of silently degrading a rejection reason to
+`undefined`.
+
+**RFP 3.6 coverage.** A second test asserts every one of the 44 codes walras can emit —
+37 inherited plus 7 `walras_*` — has non-empty human-readable text, and a third asserts the
+two taxonomies are disjoint. `@x402/stellar` populates `invalidMessage` on exactly one of
+its paths, so walras backfills the rest without ever altering the machine-readable code.
+That is what makes "non-null reason on every rejection" true by construction rather than by
+assertion.
+
+---
+
 ## Not yet captured
 
 | Section | Blocked on |
 |---|---|
-| **Stock-client transcript** (Q-011) | A buyer account holding testnet USDC. The only documented funding path is the **captcha-gated Circle faucet** (faucet.circle.com, select Stellar) — not automatable from this session. Friendbot (XLM) and trustline creation are automatable; the USDC leg is not. |
-| **S2 Conformance** | Same. Also gated on the facilitator existing (S1). |
+| **Stock-client transcript** (Q-011) | A buyer account holding testnet USDC. The only documented funding path is the **captcha-gated Circle faucet** (faucet.circle.com, select Stellar) — not automatable. Friendbot (XLM) and trustline creation are automatable; the USDC leg is not. |
+| **A settlement by walras on-chain** | Same. S1-4's successful settlement is modelled; S0-4 decodes a real one, but that one is the reference operator's, not ours. |
+| **Live discrimination of the tampered payload** | Same. S1-4 discriminates it against the RPC double; live testnet cannot until simulation can succeed. |
+| **S2 Conformance** | Same — a stock client needs a funded buyer. |
 | **S3 Discovery / poisoning tests** | S3 implementation. |
 | **S4 Search eval metrics** | S4 implementation. |
 | **S5 Demo run + recording** | S5. |
 
-Fund one testnet account with USDC and both S0-6 and the local e2e run close.
+Fund one testnet account with USDC and the first five rows close together.
