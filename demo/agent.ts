@@ -179,13 +179,28 @@ const catalog = (await (await fetch(listUrl)).json()) as { items: Listing[] };
 const entry = catalog.items.find(item => item.resource === pick.resource);
 
 console.log(`\n== agent: the catalog entry this settlement just refreshed ==`);
-if (entry) {
-  console.log(`lastUpdated: ${pick.lastUpdated} (at search time) -> ${entry.lastUpdated} (now)`);
-  console.log(JSON.stringify(entry, null, 2));
-} else {
+if (!entry) {
   console.error(`listing for ${pick.resource} not found after settlement`);
   process.exit(1);
 }
+// The refresh is asserted, not narrated: settle-gated cataloging means THIS
+// settlement must have bumped lastUpdated past the value search returned. A
+// silent store fault (DECISIONS D-015/D-025) would leave it stale — that is a
+// demo failure, not a PASS.
+const seenAtSearch = Date.parse(pick.lastUpdated);
+const seenNow = Date.parse(entry.lastUpdated);
+if (!(Number.isFinite(seenAtSearch) && Number.isFinite(seenNow) && seenNow > seenAtSearch)) {
+  console.error(
+    `catalog entry was NOT refreshed by this settlement: lastUpdated ` +
+      `${pick.lastUpdated} (at search time) -> ${entry.lastUpdated} (after settling)`,
+  );
+  process.exit(1);
+}
+console.log(
+  `lastUpdated: ${pick.lastUpdated} (at search time) -> ${entry.lastUpdated} ` +
+    `(bumped by this settlement — asserted)`,
+);
+console.log(JSON.stringify(entry, null, 2));
 
 // Machine-readable trailer for scripts/demo.sh.
 console.log(

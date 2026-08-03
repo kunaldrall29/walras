@@ -1579,8 +1579,11 @@ DEMO --tampered: PASS — rejected with invalid_exact_stellar_payload_wrong_amou
 ### `./scripts/demo.sh --expired` — auth entry allowed to expire
 
 Stock-built payload with `maxTimeoutSeconds: 15` (`createdAtLedger 3943595`,
-`signatureExpirationLedger 3943598`); the script waits past the bound **plus** the
-package's 2-ledger tolerance (F-046) before submitting:
+`signatureExpirationLedger 3943598`); the script waits until the chain is 2+ ledgers
+past the bound — margin against RPC-view skew between the script and the facilitator
+(2 is the same skew constant the package uses for its own bound check, F-046; expiry
+itself is enforced strictly by the Soroban host during simulation, F-064) — before
+submitting:
 
 ```
   latest ledger: 3943601
@@ -1611,8 +1614,21 @@ The seller is listed by a legitimate settlement (`751fdb68…e635`), then the at
 DEMO --poison-catalog: PASS — a real settled payment could not touch another seller's listing
 ```
 
+**Post-review hardening, re-validated live** (2026-08-03, runs
+`run-20260803T172550Z` … `run-20260803T172916Z`): an adversarial review pass over the
+demo scripts produced seven confirmed findings (exact-code gates, refresh assertion,
+`.env` placeholder shadowing, dotenv/bash parser divergence, poison stderr capture,
+`SEED_IDS` contract, F-046 citation direction — all fixed), after which **all four modes
+re-ran PASS**: agent tx `8977504d…edc8` (fee again 22 973), and the happy path now
+prints `lastUpdated … (bumped by this settlement — asserted)`.
+
 All three flags end in a **machine-readable reason extracted from the live response**,
-never hardcoded — the script exits nonzero if the expected rejection shape is absent.
+never hardcoded — and the gates demand the **exact expected code**
+(`…_wrong_amount`, `…_simulation_failed`, `bazaar_listing_owned_by_other_payee`): a
+generic rejection such as `walras_internal_error`, or a misconfiguration 400, fails the
+demo rather than passing it. The happy-path agent likewise **asserts** that its
+settlement bumped the listing's `lastUpdated` past the search-time value instead of
+merely printing the two timestamps.
 
 ---
 
@@ -1654,13 +1670,40 @@ raw logs land in `demo-logs/run-<stamp>-happy/` if a retake needs stitching.
 
 ## S5-5 — README quickstart, timed from scratch (2026-08-03)
 
-Measured on this codespace (4-core dev container, warm npm registry cache):
+Measured on this codespace (4-core dev container, warm npm registry + pnpm store cache),
+following the README top to bottom against commit `fed532b`:
 
 | step | command | measured |
 |---|---|---|
+| clone | `git clone` (local) | < 1 s |
+| install | `pnpm install` | **5 s** (warm store; the S5-1 frozen-lockfile install measured 5.6 s) |
 | account setup | `node scripts/setup-accounts.mjs` | **25 s** (3 accounts Friendbot-funded, 2 USDC trustlines) |
 | manual USDC faucet | faucet.circle.com (captcha) | human step, ~2–5 min (S2 measurement: minutes, not hours) |
-| _(timed fresh-clone walkthrough below)_ | | |
+| preflight | `pnpm preflight` | **3 s** — PASS |
+| demo | `./scripts/demo.sh` | **65 s**, exit 0 — includes the first build and **five fresh on-chain settlements** |
+
+Total machine time ≈ **1 min 40 s**; with the one human faucet step the full
+"docs to a paid, discoverable endpoint" path lands around **5–8 minutes** — comfortably
+inside the RFP's under-an-hour bar even on a cold cache.
+
+The timed run doubled as the session's **self-validation** (fresh clone → README →
+working demo, no undocumented steps). Its own settlement set, all fee 22 973 stroops:
+seeds `b305f5b4…28eb`, `58f8284e…701d`, `1a4c0830…6ece`, `f2bf42b8…050a`; agent tx
+`66ff439c39614f9b5d5660e15c18379d32c4aef460c480c05eb298c658bf5c07`
+(`DEMO: PASS — search -> pay -> hash -> auto-listed`).
+
+Independent Horizon re-verification of the S5-2/S5-3 headline transactions (fees and
+inclusion, queried out-of-band after the runs):
+
+```
+f2857a0b successful=true ledger=3943548 fee=22973 source=GATIEP… (agent, happy path)
+b44084d1 successful=true ledger=3943565 fee=18374 source=GATIEP… (poison self-transfer)
+69a3078e successful=true ledger=3943539 fee=22973 source=GATIEP… (first auto-listing seed)
+```
+
+The poison self-transfer's 18 374 stroops matches the S3-4 self-transfer fee to the
+stroop; `source` is the walras submitter in every case — the facilitator sponsored every
+fee, and the buyer never paid one (F-006).
 
 ---
 

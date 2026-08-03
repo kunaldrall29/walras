@@ -53,11 +53,42 @@ die()  { echo "demo: FAIL — $*" >&2; exit 1; }
 
 # --- preconditions ----------------------------------------------------------
 [ -f .env ] || die ".env missing. Run: cp .env.example .env, then node scripts/setup-accounts.mjs and paste its fragment in."
-set -a; . ./.env; set +a
+# .env is parsed with Node's process.loadEnvFile — the exact parser the
+# facilitator and preflight use — so the three consumers can never disagree, and
+# stray non KEY=VALUE lines (e.g. an over-pasted setup-accounts trailer) are
+# ignored instead of being executed as shell.
+eval "$(node -e '
+  process.loadEnvFile(".env");
+  const fs = require("fs");
+  const keys = new Set();
+  for (const line of fs.readFileSync(".env", "utf8").split("\n")) {
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line);
+    if (m) keys.add(m[1]);
+  }
+  const q = String.fromCharCode(39);
+  for (const k of keys) {
+    const v = process.env[k];
+    if (v === undefined) continue;
+    console.log("export " + k + "=" + q + v.split(q).join(q + "\\" + q + q) + q);
+  }
+')" || die "could not parse .env"
+
+# Shape checks catch the .env.example placeholders (S..., G...) surviving into
+# .env — the classic fresh-clone failure — before anything boots.
+require_strkey() { # name value prefix
+  local name="$1" value="$2" prefix="$3"
+  case "$value" in
+    "$prefix"*) [ "${#value}" -eq 56 ] && return 0 ;;
+  esac
+  die "$name in .env is not a valid Stellar ${prefix}… strkey (56 chars, got ${#value}). Replace any ${prefix}... placeholder with the real value from: node scripts/setup-accounts.mjs"
+}
 SUBMITTER="${SUBMITTER_SECRET:-${FACILITATOR_STELLAR_PRIVATE_KEY:-}}"
 [ -n "$SUBMITTER" ] || die "SUBMITTER_SECRET (or FACILITATOR_STELLAR_PRIVATE_KEY) is not set in .env"
+require_strkey "SUBMITTER_SECRET" "$SUBMITTER" "S"
 [ -n "${CLIENT_STELLAR_PRIVATE_KEY:-}" ] || die "CLIENT_STELLAR_PRIVATE_KEY is not set in .env"
+require_strkey "CLIENT_STELLAR_PRIVATE_KEY" "$CLIENT_STELLAR_PRIVATE_KEY" "S"
 [ -n "${SERVER_STELLAR_ADDRESS:-}" ] || die "SERVER_STELLAR_ADDRESS is not set in .env"
+require_strkey "SERVER_STELLAR_ADDRESS" "$SERVER_STELLAR_ADDRESS" "G"
 [ -d node_modules ] && [ -d demo/node_modules ] || die "dependencies missing — run: pnpm install"
 command -v curl >/dev/null || die "curl is required"
 
@@ -222,6 +253,9 @@ run_tampered() {
   echo "payload built (createdAtLedger $(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).createdAtLedger)' "$LOG_DIR/payload.json"))"
 
   say "tampering: paymentRequirements now CLAIM double the signed amount (100000 -> 200000)"
+  # The gate demands the EXACT reason the tamper must produce (structural check,
+  # pre-simulation, F-064; proven live in S2-6). A generic rejection — a 500's
+  # walras_internal_error, a misconfiguration 400 — must FAIL the demo, not pass it.
   node -e '
     const fs = require("fs");
     const body = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).requestBody;
@@ -234,10 +268,14 @@ run_tampered() {
       const out = await res.json();
       console.log(`POST /verify -> HTTP ${res.status}`);
       console.log(JSON.stringify(out, null, 2));
-      if (out.isValid !== false || !out.invalidReason) process.exit(1);
+      const want = "invalid_exact_stellar_payload_wrong_amount";
+      if (res.status !== 200 || out.isValid !== false || out.invalidReason !== want) {
+        console.error(`expected HTTP 200 with invalidReason ${want}, got HTTP ${res.status} with ${out.invalidReason ?? out.error?.code ?? "(none)"}`);
+        process.exit(1);
+      }
       fs.writeFileSync(`${process.argv[3]}/verify.json`, JSON.stringify(out));
     });
-  ' "$LOG_DIR/payload.json" "$FAC" "$LOG_DIR" || die "expected isValid:false with a non-null invalidReason"
+  ' "$LOG_DIR/payload.json" "$FAC" "$LOG_DIR" || die "the tamper did not produce invalid_exact_stellar_payload_wrong_amount — see output above"
 
   REASON="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).invalidReason)' "$LOG_DIR/verify.json")"
   say "machine-readable reason"
@@ -252,7 +290,12 @@ run_expired() {
   ( cd demo && NEGATIVE_MAX_TIMEOUT_SECONDS=15 TARGET_URL="$SELLER/weather" "$TSX" negative-payload.ts ) \
     >"$LOG_DIR/payload.json"
 
-  say "waiting for the chain to pass the auth entry's expiry (+2-ledger tolerance, FACTS F-046)"
+  # The wait runs 2 ledgers past the bound as margin against RPC-view skew
+  # between this script and the facilitator (2 is the same skew constant the
+  # package uses for its own bound check, F-046 — cited for the constant's
+  # rationale, not its direction: expiry itself is enforced by the Soroban host
+  # during simulation, F-064).
+  say "waiting for the chain to pass the auth entry's expiry, plus 2 ledgers of RPC-skew margin"
   node --input-type=module -e '
     import { readFileSync } from "node:fs";
     const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
@@ -289,12 +332,21 @@ run_expired() {
       console.log(JSON.stringify(v, null, 2));
       console.log(`POST /settle -> HTTP ${ss}`);
       console.log(JSON.stringify(s, null, 2));
-      if (v.isValid !== false || !v.invalidReason) process.exit(1);
-      if (s.success !== false || !s.errorReason) process.exit(1);
+      // Exact code only (F-064: live, the expired case surfaces as re-simulation
+      // failure). A walras_internal_error or misconfiguration rejection must FAIL.
+      const want = "invalid_exact_stellar_payload_simulation_failed";
+      if (vs !== 200 || v.isValid !== false || v.invalidReason !== want) {
+        console.error(`expected /verify HTTP 200 with invalidReason ${want}, got HTTP ${vs} with ${v.invalidReason ?? "(none)"}`);
+        process.exit(1);
+      }
+      if (ss !== 200 || s.success !== false || s.errorReason !== want) {
+        console.error(`expected /settle HTTP 200 with errorReason ${want}, got HTTP ${ss} with ${s.errorReason ?? "(none)"}`);
+        process.exit(1);
+      }
       fs.writeFileSync(`${process.argv[3]}/rejections.json`,
         JSON.stringify({ invalidReason: v.invalidReason, errorReason: s.errorReason }));
     });
-  ' "$LOG_DIR/payload.json" "$FAC" "$LOG_DIR" || die "expected both endpoints to reject with non-null reasons"
+  ' "$LOG_DIR/payload.json" "$FAC" "$LOG_DIR" || die "the expired payload did not produce invalid_exact_stellar_payload_simulation_failed on both endpoints — see output above"
 
   say "machine-readable reasons"
   node -e '
@@ -316,8 +368,11 @@ run_poison() {
   echo "listing owned by $SERVER_STELLAR_ADDRESS captured"
 
   say "2/3 attacker pays ITSELF (real on-chain settlement) while claiming the seller's URL"
+  # stdout only into poison.json — it is JSON.parsed below, and a stray runtime
+  # warning on stderr must not corrupt it.
   ( cd demo && HOSTILE_MODE=poison FACILITATOR_URL="$FAC" TARGET_URL="$SELLER/weather" "$TSX" hostile-client.ts ) \
-    >"$LOG_DIR/poison.json" 2>&1 || die "hostile client failed to run — see $LOG_DIR/poison.json"
+    >"$LOG_DIR/poison.json" 2>"$LOG_DIR/poison.stderr.log" \
+    || die "hostile client failed to run — see $LOG_DIR/poison.json and poison.stderr.log"
   node -e '
     const report = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
     console.log(`  attacker            : ${report.attacker}`);

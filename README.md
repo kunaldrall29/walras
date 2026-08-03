@@ -30,17 +30,21 @@ every rejection path. It adds no payment validation of its own — see
 ## Quickstart: docs to a paid, discoverable endpoint
 
 Prerequisites: Node ≥ 22, pnpm 10 (`corepack enable` gets you pnpm), git, curl.
-Measured times below are from a timed clean-machine walkthrough (EVIDENCE S5-5); the
-whole path fits comfortably inside an hour, including the one manual faucet step.
+Every duration below was measured in a timed fresh-clone walkthrough (EVIDENCE S5-5):
+**≈ 1 min 40 s of machine time** end to end, plus one manual faucet visit — the whole
+"docs to a paid, discoverable endpoint" path lands around 5–8 minutes, far inside the
+hour bar.
 
-**1. Clone and install** (~2 min)
+**1. Clone and install** (measured: 5 s on a warm pnpm store; expect a couple of
+minutes cold)
 
 ```bash
 git clone <this-repo> && cd walras
 pnpm install
 ```
 
-**2. Create and fund testnet accounts** (~2 min automated + one manual faucet visit)
+**2. Create and fund testnet accounts** (measured: 25 s automated + one manual faucet
+visit, ~2–5 min)
 
 ```bash
 cp .env.example .env
@@ -53,13 +57,14 @@ fragment. Paste it into `.env`. One step cannot be automated: fund the **buyer**
 the script prints with testnet USDC at [faucet.circle.com](https://faucet.circle.com)
 (select Stellar — captcha-gated, so it needs a human).
 
-**3. Preflight** (~10 s)
+**3. Preflight** (measured: 3 s)
 
 ```bash
 pnpm preflight     # submitter funded? RPC reachable?
 ```
 
-**4. The demo** (~2 min, five real settlements on stellar:testnet)
+**4. The demo** (measured: 65 s including the first build — five real settlements on
+stellar:testnet)
 
 ```bash
 ./scripts/demo.sh

@@ -98,6 +98,10 @@ console.log("RPC_URL=https://soroban-testnet.stellar.org");
 console.log(`USDC_CONTRACT_ID=${USDC_SAC}`);
 for (const o of out) {
   console.log(`${o.env}=${o.env.endsWith("ADDRESS") ? o.pub : o.secret}`);
+  // SUBMITTER_SECRET is the canonical facilitator variable and is preferred over
+  // the e2e-suite alias everywhere — print it too, so a pasted fragment never
+  // loses to a stale SUBMITTER_SECRET line above it.
+  if (o.env === "FACILITATOR_STELLAR_PRIVATE_KEY") console.log(`SUBMITTER_SECRET=${o.secret}`);
   if (o.env.endsWith("ADDRESS")) console.log(`SELLER_SECRET=${o.secret}`);
 }
 

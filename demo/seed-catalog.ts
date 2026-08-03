@@ -34,17 +34,27 @@ const corpus = JSON.parse(
   readFileSync(new URL("../eval/search/corpus.json", import.meta.url), "utf8"),
 ) as { resources: CorpusResource[] };
 
-// SEED_IDS narrows the run to a comma-separated subset of corpus ids; unset seeds all.
-// scripts/demo.sh uses this to stage the first "auto-listed" payment separately.
-const seedIds = process.env.SEED_IDS?.split(",").map(s => s.trim()).filter(Boolean);
-const resources = seedIds
-  ? corpus.resources.filter(r => seedIds.includes(r.id))
-  : corpus.resources;
-if (seedIds && resources.length !== seedIds.length) {
+// SEED_IDS narrows the run to a comma-separated subset of corpus ids; unset or
+// empty seeds all. scripts/demo.sh uses this to stage the first "auto-listed"
+// payment separately. Duplicates are collapsed; unknown ids are a hard error.
+const rawSeedIds = process.env.SEED_IDS;
+let seedIds: string[] | undefined;
+if (rawSeedIds !== undefined && rawSeedIds.trim() !== "") {
+  seedIds = [...new Set(rawSeedIds.split(",").map(s => s.trim()).filter(Boolean))];
+  if (seedIds.length === 0) {
+    console.error(`SEED_IDS is set but contains no ids: ${JSON.stringify(rawSeedIds)}`);
+    process.exit(1);
+  }
   const known = new Set(corpus.resources.map(r => r.id));
-  console.error(`SEED_IDS contains unknown ids: ${seedIds.filter(id => !known.has(id)).join(", ")}`);
-  process.exit(1);
+  const unknown = seedIds.filter(id => !known.has(id));
+  if (unknown.length > 0) {
+    console.error(`SEED_IDS contains unknown ids: ${unknown.join(", ")}`);
+    process.exit(1);
+  }
 }
+const resources = seedIds
+  ? corpus.resources.filter(r => (seedIds as string[]).includes(r.id))
+  : corpus.resources;
 
 const signer = createEd25519Signer(secret);
 const client = new x402Client().register("stellar:*", new ExactStellarScheme(signer));
