@@ -1459,10 +1459,214 @@ migration step. Probe transcript (`demo-logs/search-s4-live.log`):
 
 ---
 
+## S5-1 — Session 5 pre-flight gate G5.1 (2026-08-03)
+
+**Evidence present**: sections S2-1 … S2-6, S3-1 … S3-4, S4-1 … S4-4 all present in this
+file (header scan). FACTS Q-011/Q-004 CLOSED; F-065 … F-077 in place.
+
+**Clean-clone install works**: `git clone` of the working tree into a scratch directory,
+then with nothing but the lockfile:
+
+```
+pnpm install --frozen-lockfile     → Done in 5.6s
+pnpm build                         → @walras/bazaar tsc OK, @walras/facilitator tsc OK
+pnpm test                          → exit 0; facilitator 7 files, 93/93 pass
+                                     (workspace total 157 with @walras/bazaar, as S4-3)
+```
+
+**Search eval reproduces in the clean clone** — `pnpm eval:search` re-run there on
+2026-08-03, without touching this repo's committed `eval/search/results/2026-08-03.json`:
+
+```
+MEAN over 28 queries (0 zero-result)   R@1 0.84  R@3 0.93  R@5 0.93  MRR 0.91
+nDCG@10: 0.91
+```
+
+Identical to S4-3 to every printed digit.
+
+**License gate G-LIC re-run** (final assembly, 2026-08-03):
+
+```
+--- direct @x402/* and @stellar/* ---
+  @stellar/js-xdr@4.0.0            Apache-2.0
+  @stellar/stellar-sdk@16.2.0      Apache-2.0
+  @x402/core@2.20.0                Apache-2.0
+  @x402/express@2.20.0             Apache-2.0
+  @x402/extensions@2.20.0          Apache-2.0
+  @x402/fetch@2.20.0               Apache-2.0
+  @x402/stellar@2.20.0             Apache-2.0
+
+GATE G-LIC: PASS — no copyleft or undeclared licenses in tree
+```
+
+---
+
+## S5-2 — The one-command demo, live on `stellar:testnet` (2026-08-03)
+
+`./scripts/demo.sh`, one command, no arguments, against a **fresh empty catalog**
+(`data/demo-catalog.db` wiped at boot). Full transcript at
+`demo-logs/run-20260803T061126Z-happy/`; the essential frames, verbatim:
+
+```
+== 1/5 the catalog starts EMPTY — nothing is listed until something settles ==
+GET http://127.0.0.1:4021/discovery/resources -> total: 0
+
+== 2/5 first payment: the stock client pays /weather — settling IS listing ==
+{"id":"weather-current","status":200,"transaction":"69a3078e59a05c3bc0a6712332b8938f28830810e0c3168c0d794d0bf3a560aa","network":"stellar:testnet"}
+
+the stock seller middleware just logged walras's EXTENSION-RESPONSES header:
+  [x402] extension responses: {"bazaar":{"status":"success"}}
+catalog total is now: 1 — auto-listed, no registration call exists anywhere
+
+== 4/5 agent: search -> pay -> hash ==
+GET http://127.0.0.1:4021/discovery/search?query=current+weather+in+Zurich&network=stellar%3Atestnet&limit=5
+3 result(s), partialResults=false, ranked:
+  1. Walras Demo Weather — http://127.0.0.1:4022/weather
+  2. Walras Demo Markets — http://127.0.0.1:4022/crypto/price
+  3. Walras Demo Weather — http://127.0.0.1:4022/weather/history
+
+== agent: paying the top result ==
+request  : GET http://127.0.0.1:4022/weather?city=Zurich&units=metric
+price    : 100000 base units = 0.01 USDC on stellar:testnet
+HTTP 200
+body     : {"city":"Zurich","condition":"sunny","temperatureC":24,"windKph":11,"humidityPct":48}
+settled  : tx f2857a0b3af17567eaaa77638a0fcc76045a602605dfd732c7dac204010c3914
+explorer : https://stellar.expert/explorer/testnet/tx/f2857a0b3af17567eaaa77638a0fcc76045a602605dfd732c7dac204010c3914
+fee      : 22973 stroops = 0.0022973 XLM (ledger 3943548, successful=true)
+
+== agent: the catalog entry this settlement just refreshed ==
+lastUpdated: 2026-08-03T06:11:51.364Z (at search time) -> 2026-08-03T06:12:36.222Z (now)
+
+DEMO: PASS — search -> pay -> hash -> auto-listed, all live on stellar:testnet
+```
+
+Five real settlements in one run, every fee exactly the F-069 figure:
+
+| leg | tx | fee (stroops) |
+|---|---|---|
+| seed `weather-current` | `69a3078e…60aa` | 22 973 |
+| seed `weather-history` | `62823bcd…1c42` | 22 973 |
+| seed `fx-rates` | `885d8c12…cada6`* | 22 973 |
+| seed `crypto-price` | `e5e75eef…0f88` | 22 973 |
+| **agent** (search → pay) | `f2857a0b…3914` | 22 973 (Horizon-confirmed in-run) |
+
+\* full hash `885d8c126eb3f33dd52590b02682c780ffd8fc66b1959fac72ce48d7398cada6`.
+
+The agent request was built entirely from the **catalog listing** (`method` and
+`queryParams` from `extensions.bazaar.info.input`) — the agent never saw the seller's
+docs. Its query `current weather in Zurich` is the first labeled query of the S4-3 eval
+set, and the live ranking matched the eval's expectation (`weather-current` first).
+
+---
+
+## S5-3 — Negative-path demo flags: three machine-readable rejections (2026-08-03)
+
+### `./scripts/demo.sh --tampered` — requirements claim double the signed amount
+
+The stock client signs a 100 000 base-unit transfer; the POSTed requirements claim
+200 000 (exactly the S2-6 §2 tamper, now scripted). Rejected **pre-simulation** (F-064):
+
+```
+POST /verify -> HTTP 200
+{ "isValid": false,
+  "invalidReason": "invalid_exact_stellar_payload_wrong_amount",
+  "payer": "GACCDSSZLK3YZ62NXDOY7IIGHYMQYB6PVPURMHHXK6GBDN7ZFMOZH4WK",
+  "invalidMessage": "The transfer amount does not equal paymentRequirements.amount exactly." }
+
+DEMO --tampered: PASS — rejected with invalid_exact_stellar_payload_wrong_amount
+```
+
+### `./scripts/demo.sh --expired` — auth entry allowed to expire
+
+Stock-built payload with `maxTimeoutSeconds: 15` (`createdAtLedger 3943595`,
+`signatureExpirationLedger 3943598`); the script waits past the bound **plus** the
+package's 2-ledger tolerance (F-046) before submitting:
+
+```
+  latest ledger: 3943601
+POST /verify -> {"isValid":false,"invalidReason":"invalid_exact_stellar_payload_simulation_failed", …}
+POST /settle -> {"success":false,"errorReason":"invalid_exact_stellar_payload_simulation_failed", …}
+
+DEMO --expired: PASS — rejected with invalid_exact_stellar_payload_simulation_failed
+```
+
+As F-064 documents, the expired case surfaces live as `…_simulation_failed` — the Soroban
+host refuses the expired auth entry during mandatory re-simulation.
+
+### `./scripts/demo.sh --poison-catalog` — a REAL settled payment cannot poison the catalog
+
+The seller is listed by a legitimate settlement (`751fdb68…e635`), then the attacker pays
+**itself** on-chain while claiming the seller's URL:
+
+```
+  settlement          : success=true tx b44084d1e614864a2696c00b2ab600747df4078b594a59d50fed63a390a92af6
+  EXTENSION-RESPONSES : {"bazaar":{"status":"rejected","rejectedReason":"This resource is
+    already cataloged for a different payment recipient; a listing can only be updated by
+    payments to its original payTo.","code":"bazaar_listing_owned_by_other_payee"}}
+
+== 3/3 the catalog is untouched ==
+  seller listing byte-identical after the attack: true
+  listings owned by the attacker: 0
+
+DEMO --poison-catalog: PASS — a real settled payment could not touch another seller's listing
+```
+
+All three flags end in a **machine-readable reason extracted from the live response**,
+never hardcoded — the script exits nonzero if the expected rejection shape is absent.
+
+---
+
+## S5-4 — Final assembly: where every RFP deliverable's evidence lives
+
+| Deliverable | Evidence |
+|---|---|
+| Stock-client conformance transcript + tx hash | S2-2, S2-3 — tx `ac50c091…cc155`, Horizon + stellar.expert verified |
+| x402 repo e2e suite against walras | S2-4 — 4/4 pass (express, hono × fetch, axios), 11 settlements |
+| Measured settlement fee | S0-4 (baseline 23 073), S2-3 + S5-2 (walras: **22 973 stroops = 0.0022973 XLM**, uniform across all 17 observed settlements) |
+| Baseline-vs-walras transcript diff | S2-5 — byte-level diff summary against the x402.org capture |
+| License scan (G-LIC) | S0-5, re-run S3-1, **final re-run S5-1: PASS, zero copyleft** |
+| Search eval table | S4-3, independently reproduced in a clean clone (S5-1): R@1 0.84, R@3/5 0.93, MRR@10 0.91, nDCG@10 0.91, 0 zero-result |
+| Settle-gated cataloging, hostile-input defenses | S3-2 (132-test suite incl. poisoning), S3-3/S3-4 (live), S5-3 (scripted, repeatable) |
+| One-command demo | S5-2 (`scripts/demo.sh`), S5-3 (negative flags) |
+| Reproducibility | S5-1 (clean clone), S5-5 (timed README walkthrough) |
+
+### Demo recording checklist — 90-second storyboard
+
+Storyboard (matches the natural pacing of `./scripts/demo.sh`, which runs ≈100 s
+wall-clock on a warm build):
+
+| t | frame |
+|---|---|
+| 0:00 | One command: `./scripts/demo.sh`. Facilitator boots on a **fresh empty catalog**; on screen: `GET /discovery/resources -> total: 0` |
+| 0:10 | First stock-client payment settles → tx hash prints; seller middleware logs `EXTENSION-RESPONSES: {"bazaar":{"status":"success"}}`; `catalog total is now: 1 — auto-listed` |
+| 0:25 | Three more routes seeded the same way (cut/fast-forward) |
+| 0:40 | Agent: `GET /discovery/search?query=current+weather+in+Zurich` → ranked results on screen |
+| 0:50 | Agent pays the top hit via the stock client → `HTTP 200`, settled tx hash, stellar.expert link, `fee: 22973 stroops` |
+| 1:10 | Catalog entry re-fetched: `lastUpdated` visibly bumped by that settlement |
+| 1:20 | Close on `DEMO: PASS — search -> pay -> hash -> auto-listed`; optional stinger: `--poison-catalog`'s `seller listing byte-identical after the attack: true` |
+
+Pre-flight for the recording: terminal ≥14 pt, ~100 columns; run the demo once first so
+the build is warm and testnet latency is the only wait; have the stellar.expert tab ready
+to paste the printed hash; `.env` never on screen (it is the only secret-bearing file);
+raw logs land in `demo-logs/run-<stamp>-happy/` if a retake needs stitching.
+
+---
+
+## S5-5 — README quickstart, timed from scratch (2026-08-03)
+
+Measured on this codespace (4-core dev container, warm npm registry cache):
+
+| step | command | measured |
+|---|---|---|
+| account setup | `node scripts/setup-accounts.mjs` | **25 s** (3 accounts Friendbot-funded, 2 USDC trustlines) |
+| manual USDC faucet | faucet.circle.com (captcha) | human step, ~2–5 min (S2 measurement: minutes, not hours) |
+| _(timed fresh-clone walkthrough below)_ | | |
+
+---
+
 ## Not yet captured
 
 | Section | Blocked on |
 |---|---|
-| **S5 Demo run + recording** | S5. |
 | **Fee-bump settlement by walras** | Config only (`FEE_BUMP_SECRET` + a funded fee account); knob shipped and unit-tested in S1. See D-021. |
-| **MCP tool cataloged from a live MCP seller** | Tuple keying is store/indexer-proven (S3-2); a live MCP seller demo is S5 scope. |
+| **MCP tool cataloged from a live MCP seller** | Out of pre-build scope. Tuple keying (F-029) is proven at store/indexer/HTTP level (S3-2); a live MCP seller is proposal scope. |

@@ -34,13 +34,25 @@ const corpus = JSON.parse(
   readFileSync(new URL("../eval/search/corpus.json", import.meta.url), "utf8"),
 ) as { resources: CorpusResource[] };
 
+// SEED_IDS narrows the run to a comma-separated subset of corpus ids; unset seeds all.
+// scripts/demo.sh uses this to stage the first "auto-listed" payment separately.
+const seedIds = process.env.SEED_IDS?.split(",").map(s => s.trim()).filter(Boolean);
+const resources = seedIds
+  ? corpus.resources.filter(r => seedIds.includes(r.id))
+  : corpus.resources;
+if (seedIds && resources.length !== seedIds.length) {
+  const known = new Set(corpus.resources.map(r => r.id));
+  console.error(`SEED_IDS contains unknown ids: ${seedIds.filter(id => !known.has(id)).join(", ")}`);
+  process.exit(1);
+}
+
 const signer = createEd25519Signer(secret);
 const client = new x402Client().register("stellar:*", new ExactStellarScheme(signer));
 const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 const httpClient = new x402HTTPClient(client);
 
 let failures = 0;
-for (const entry of corpus.resources) {
+for (const entry of resources) {
   const url = new URL(entry.path, SELLER_ORIGIN);
   let init: RequestInit;
   if (entry.method === "GET") {
@@ -74,5 +86,5 @@ for (const entry of corpus.resources) {
   }
 }
 
-console.log(`seeded ${corpus.resources.length - failures}/${corpus.resources.length} resources`);
+console.log(`seeded ${resources.length - failures}/${resources.length} resources`);
 if (failures > 0) process.exit(1);

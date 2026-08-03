@@ -16,6 +16,7 @@ build/
 data/
 
 # Logs, coverage, OS noise
+demo-logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*

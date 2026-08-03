@@ -28,17 +28,26 @@ if (!secret) {
 }
 
 // The PaymentRequired the seller's 402 advertised, with only maxTimeoutSeconds changed.
+// payTo/asset come from the environment so the script works on any account set
+// (scripts/demo.sh); the defaults are the S2-6 capture values, unchanged.
 const paymentRequired = {
   x402Version: 2,
   error: "Payment required",
-  resource: { url: "http://127.0.0.1:4030/weather", description: "", mimeType: "" },
+  resource: {
+    url: process.env.TARGET_URL ?? "http://127.0.0.1:4030/weather",
+    description: "",
+    mimeType: "",
+  },
   accepts: [
     {
       scheme: "exact",
       network: "stellar:testnet",
       amount: "100000",
-      asset: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
-      payTo: "GD7JFO5L4WP7FGRFB33ATR5NJF2FWSC5FTOAKCAYWUMIBMNHFURKNI3R",
+      asset:
+        process.env.USDC_CONTRACT_ID ?? "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+      payTo:
+        process.env.SERVER_STELLAR_ADDRESS ??
+        "GD7JFO5L4WP7FGRFB33ATR5NJF2FWSC5FTOAKCAYWUMIBMNHFURKNI3R",
       maxTimeoutSeconds,
       extra: { areFeesSponsored: true },
     },
