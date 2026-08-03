@@ -1692,6 +1692,19 @@ seeds `b305f5b4…28eb`, `58f8284e…701d`, `1a4c0830…6ece`, `f2bf42b8…050a`
 `66ff439c39614f9b5d5660e15c18379d32c4aef460c480c05eb298c658bf5c07`
 (`DEMO: PASS — search -> pay -> hash -> auto-listed`).
 
+**Final-state validation caught a live congestion event — and the demo failed honestly.**
+The post-hardening fresh-clone validation (commit `ccb982c`; `.env` built exactly as the
+README instructs — `cp .env.example .env` + pasted setup-accounts fragment *including a
+deliberately over-pasted `>>>` trailer*; `pnpm preflight` PASS, proving the parser-
+divergence and placeholder-shadowing fixes) ran into real testnet congestion: the
+`fx-rates` seed's `/settle` took **30.5 s** (versus 6–18 s for its neighbors in the same
+run), exceeding the stock middleware's facilitator-client timeout. walras reported the
+settle outcome, the stock seller re-issued 402, no funds moved for that attempt
+(buyer balance verified on Horizon: exactly 3 × 0.01 USDC left the account, not 4), and
+the demo **exited 1** rather than printing a false PASS. The seeder and agent then
+gained one *visible* retry per payment (both attempts printed; a second failure still
+fails the run), and the validation re-ran clean — see the closing run record below.
+
 Independent Horizon re-verification of the S5-2/S5-3 headline transactions (fees and
 inclusion, queried out-of-band after the runs):
 

@@ -78,22 +78,35 @@ for (const entry of resources) {
     };
   }
 
-  try {
-    const response = await fetchWithPayment(url.toString(), init);
-    const receipt = httpClient.getPaymentSettleResponse(name => response.headers.get(name));
-    console.log(
-      JSON.stringify({
-        id: entry.id,
-        status: response.status,
-        transaction: receipt?.success === true ? receipt.transaction : null,
-        network: receipt?.network ?? null,
-      }),
-    );
-    if (response.status !== 200 || receipt?.success !== true) failures += 1;
-  } catch (error) {
-    failures += 1;
-    console.log(JSON.stringify({ id: entry.id, error: String(error) }));
+  // Two attempts per resource: testnet inclusion can transiently exceed the
+  // stock middleware's facilitator-client timeout (observed live: a 30.5 s
+  // settle under congestion, EVIDENCE S5-5), and one visible retry keeps a
+  // single slow ledger from killing the whole demo. Both attempts are printed;
+  // a second failure still fails the run.
+  let settled = false;
+  for (let attempt = 1; attempt <= 2 && !settled; attempt += 1) {
+    try {
+      const response = await fetchWithPayment(url.toString(), init);
+      const receipt = httpClient.getPaymentSettleResponse(name => response.headers.get(name));
+      settled = response.status === 200 && receipt?.success === true;
+      console.log(
+        JSON.stringify({
+          id: entry.id,
+          ...(attempt > 1 ? { attempt } : {}),
+          status: response.status,
+          transaction: settled && receipt?.success === true ? receipt.transaction : null,
+          network: receipt?.network ?? null,
+        }),
+      );
+    } catch (error) {
+      console.log(JSON.stringify({ id: entry.id, ...(attempt > 1 ? { attempt } : {}), error: String(error) }));
+    }
+    if (!settled && attempt === 1) {
+      console.log(JSON.stringify({ id: entry.id, retrying: "payment did not settle (testnet congestion?) — one retry" }));
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
   }
+  if (!settled) failures += 1;
 }
 
 console.log(`seeded ${resources.length - failures}/${resources.length} resources`);

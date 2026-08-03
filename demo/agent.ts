@@ -134,14 +134,28 @@ const client = new x402Client().register("stellar:*", new ExactStellarScheme(sig
 const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 const httpClient = new x402HTTPClient(client);
 
-const response = await fetchWithPayment(target.toString(), init);
-const body: unknown = await response.json();
-const receipt = httpClient.getPaymentSettleResponse(name => response.headers.get(name));
+// Two attempts: one visible retry absorbs a transient testnet-congestion miss
+// (a settle exceeding the stock middleware's timeout re-402s honestly — seen
+// live, EVIDENCE S5-5). A second failure is a demo failure.
+let response!: Response;
+let body: unknown;
+let receipt: ReturnType<typeof httpClient.getPaymentSettleResponse> | null = null;
+for (let attempt = 1; attempt <= 2; attempt += 1) {
+  response = await fetchWithPayment(target.toString(), init);
+  body = await response.json();
+  receipt = httpClient.getPaymentSettleResponse(name => response.headers.get(name));
+  if (response.status === 200 && receipt?.success === true) break;
+  console.log(`HTTP ${response.status} — payment did not settle: ${JSON.stringify(receipt ?? null)}`);
+  if (attempt === 1) {
+    console.log(`retrying once (testnet congestion?)...`);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+}
 
 console.log(`HTTP ${response.status}`);
 console.log(`body     : ${JSON.stringify(body)}`);
 if (receipt?.success !== true) {
-  console.error(`payment did not settle: ${JSON.stringify(receipt ?? null)}`);
+  console.error(`payment did not settle after 2 attempts: ${JSON.stringify(receipt ?? null)}`);
   process.exit(1);
 }
 console.log(`settled  : tx ${receipt.transaction}`);
