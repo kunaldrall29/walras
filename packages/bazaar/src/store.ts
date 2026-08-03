@@ -2,6 +2,9 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { PaymentRequirements } from "@x402/core/types";
+import { decodeCursor, encodeCursor, searchContextHash } from "./cursor.js";
+import { Fts5Retriever, type Retriever } from "./retriever.js";
+import { extractParamText } from "./searchtext.js";
 
 /**
  * SQLite-backed catalog store for Bazaar discovery listings.
@@ -111,6 +114,45 @@ export const MIN_LIST_LIMIT = 1;
 export const MAX_LIST_LIMIT = 100;
 
 /**
+ * Parameters for `GET /discovery/search` (FACTS F-026): the required
+ * natural-language query, the same five filters as the list endpoint, and the
+ * advisory limit/cursor. The spec assigns search no numeric bounds of its own,
+ * so `limit` reuses the list defaults (20, clamped 1–100) — DECISIONS D-027.
+ */
+export interface SearchParams {
+  query: string;
+  type?: string;
+  payTo?: string;
+  scheme?: string;
+  network?: string;
+  extensions?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+/** One page of ranked search results. */
+export interface SearchPage {
+  /** Listings for this page, best match first. */
+  resources: CatalogListing[];
+  /**
+   * True when additional matches were truncated from this response
+   * (FACTS F-028): either more ranked matches follow this page, or the
+   * retriever hit its retrieval cap and the tail is unknown.
+   */
+  partialResults: boolean;
+  /** Cursor for the next page, or null when this page ends the walk. */
+  nextCursor: string | null;
+}
+
+/**
+ * Retrieval cap: the most candidates the retriever is asked for per search.
+ * When the cap is hit, `partialResults` stays true through the last page —
+ * the tail beyond the cap is unknown, and claiming completeness would be
+ * false (DECISIONS D-027).
+ */
+export const MAX_SEARCH_RETRIEVE = 1000;
+
+/**
  * How long a statement waits on a locked database before erroring, in
  * milliseconds. Deliberately small: a contended catalog write must fail fast
  * and surface as an indexing error rather than delay a settlement response
@@ -159,6 +201,8 @@ CREATE TABLE IF NOT EXISTS extension_keys (
   UNIQUE (resource_id, key)
 );
 CREATE INDEX IF NOT EXISTS idx_extension_keys_resource ON extension_keys(resource_id);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(name, description, params, tags);
 `;
 
 /** Row shape returned for the resources table (SQLite types only). */
@@ -186,6 +230,8 @@ interface ResourceRow {
  */
 export class BazaarStore {
   private readonly db: DatabaseSync;
+  /** Default retriever for `search()`; the BASELINE FTS5/BM25 implementation. */
+  private readonly baselineRetriever: Retriever;
 
   /**
    * Opens (creating if necessary) the catalog database and applies the schema.
@@ -204,6 +250,60 @@ export class BazaarStore {
     this.db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
     this.db.exec("PRAGMA foreign_keys = ON");
     this.db.exec(SCHEMA_SQL);
+    this.backfillSearchIndex();
+    this.baselineRetriever = new Fts5Retriever(this.db);
+  }
+
+  /**
+   * Indexes any catalog rows missing from `search_index`.
+   *
+   * A database created before the search index existed (the Session 3 schema)
+   * has listings but no FTS rows; this brings it up to date on open, so the
+   * schema upgrade needs no migration step. On an already-current database it
+   * selects nothing and writes nothing.
+   */
+  private backfillSearchIndex(): void {
+    const missing = this.db
+      .prepare(
+        `SELECT id, service_name, description, tags_json, extensions_json
+         FROM resources WHERE id NOT IN (SELECT rowid FROM search_index)`,
+      )
+      .all() as unknown as Array<{
+      id: number | bigint;
+      service_name: string | null;
+      description: string | null;
+      tags_json: string | null;
+      extensions_json: string | null;
+    }>;
+    if (missing.length === 0) return;
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const insert = this.db.prepare(
+        "INSERT INTO search_index (rowid, name, description, params, tags) VALUES (?, ?, ?, ?, ?)",
+      );
+      for (const row of missing) {
+        insert.run(
+          row.id,
+          row.service_name ?? "",
+          row.description ?? "",
+          extractParamText(
+            row.extensions_json === null
+              ? undefined
+              : (JSON.parse(row.extensions_json) as Record<string, unknown>),
+          ),
+          row.tags_json === null ? "" : (JSON.parse(row.tags_json) as string[]).join(" "),
+        );
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      try {
+        this.db.exec("ROLLBACK");
+      } catch {
+        // The original error matters more.
+      }
+      throw error;
+    }
   }
 
   /** Closes the underlying database handle. */
@@ -322,6 +422,22 @@ export class BazaarStore {
         insertKey.run(resourceId, key);
       }
 
+      // Search index rides the same transaction as the row it describes:
+      // either both commit or neither does, so the FTS view of the catalog
+      // can never drift from the catalog itself.
+      this.db.prepare("DELETE FROM search_index WHERE rowid = ?").run(resourceId);
+      this.db
+        .prepare(
+          "INSERT INTO search_index (rowid, name, description, params, tags) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run(
+          resourceId,
+          input.serviceName ?? "",
+          input.description ?? "",
+          extractParamText(input.extensions),
+          input.tags === undefined ? "" : input.tags.join(" "),
+        );
+
       this.db.exec("COMMIT");
       return existing === undefined ? { outcome: "created" } : { outcome: "updated" };
     } catch (error) {
@@ -337,13 +453,7 @@ export class BazaarStore {
   /**
    * Lists catalog entries with the seven spec filters and stable ordering.
    *
-   * Filter semantics (FACTS F-025): `type` matches the listing discriminator;
-   * `extensions` matches an extension key present on the listing; `payTo`,
-   * `scheme`, and `network` must all match within the SAME accepts entry —
-   * together they describe one payment option, and a listing should not match
-   * `payTo=X&network=Y` merely because X appears on one option and Y on
-   * another. (Today every listing has a single owner payTo, so the readings
-   * coincide; the coherent one costs nothing.)
+   * Filter semantics live on `buildFilterConditions`, shared with `search()`.
    *
    * Ordering is `(resource, tool_name, type, id)` ascending — deterministic
    * and insertion-independent, so offset pagination is stable between pages.
@@ -355,40 +465,7 @@ export class BazaarStore {
     const limit = clampLimit(params.limit);
     const offset = params.offset !== undefined && params.offset >= 0 ? Math.floor(params.offset) : 0;
 
-    const where: string[] = [];
-    const args: (string | number)[] = [];
-
-    if (params.type !== undefined) {
-      where.push("r.type = ?");
-      args.push(params.type);
-    }
-    if (params.extensions !== undefined) {
-      where.push(
-        "EXISTS (SELECT 1 FROM extension_keys ek WHERE ek.resource_id = r.id AND ek.key = ?)",
-      );
-      args.push(params.extensions);
-    }
-    const acceptsConds: string[] = [];
-    const acceptsArgs: string[] = [];
-    if (params.payTo !== undefined) {
-      acceptsConds.push("a.pay_to = ?");
-      acceptsArgs.push(params.payTo);
-    }
-    if (params.scheme !== undefined) {
-      acceptsConds.push("a.scheme = ?");
-      acceptsArgs.push(params.scheme);
-    }
-    if (params.network !== undefined) {
-      acceptsConds.push("a.network = ?");
-      acceptsArgs.push(params.network);
-    }
-    if (acceptsConds.length > 0) {
-      where.push(
-        `EXISTS (SELECT 1 FROM accepts a WHERE a.resource_id = r.id AND ${acceptsConds.join(" AND ")})`,
-      );
-      args.push(...acceptsArgs);
-    }
-
+    const { where, args } = buildFilterConditions(params);
     const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
 
     const totalRow = this.db
@@ -406,6 +483,112 @@ export class BazaarStore {
 
     const items = rows.map(row => this.hydrate(row));
     return { items, limit, offset, total };
+  }
+
+  /**
+   * Searches the catalog with a natural-language query — `GET /discovery/search`.
+   *
+   * Pipeline: the retriever ranks up to `MAX_SEARCH_RETRIEVE` catalog rows for
+   * the query (BASELINE: FTS5/BM25); the seven-filter semantics of `list()`
+   * then intersect that ranking; keyset cursor pagination slices it. The
+   * ranking is deterministic (score DESC, id ASC), so under a static catalog a
+   * cursor walk visits every match exactly once. `partialResults` is true
+   * whenever matches were truncated from this response — a following page
+   * exists, or the retrieval cap was hit and the tail is unknown (D-027).
+   *
+   * @param params - Query, filters, advisory limit, and optional cursor.
+   * @param options - Retriever override (eval/tests) and cap override (tests).
+   * @returns One ranked page plus continuation state.
+   * @throws {InvalidCursorError} When the cursor is malformed or from a
+   *   different (query, filters) combination.
+   */
+  search(
+    params: SearchParams,
+    options: { retriever?: Retriever; maxRetrieve?: number } = {},
+  ): SearchPage {
+    const limit = clampLimit(params.limit);
+    const retriever = options.retriever ?? this.baselineRetriever;
+    const maxRetrieve = options.maxRetrieve ?? MAX_SEARCH_RETRIEVE;
+    const contextHash = searchContextHash(params);
+
+    // Decode the cursor before retrieval: a malformed cursor must be a named
+    // rejection even when the query happens to match nothing.
+    const after = params.cursor === undefined ? undefined : decodeCursor(params.cursor, contextHash);
+
+    const hits = retriever.retrieve(params.query, maxRetrieve);
+    const cappedRetrieval = hits.length >= maxRetrieve;
+    if (hits.length === 0) {
+      return { resources: [], partialResults: false, nextCursor: null };
+    }
+
+    const allowed = this.filterResourceIds(
+      hits.map(hit => hit.id),
+      params,
+    );
+    const ranked = hits.filter(hit => allowed.has(hit.id));
+
+    // Keyset position: the first hit strictly after (score DESC, id ASC) the
+    // cursor row. Linear scan is fine at the retrieval cap's scale.
+    let start = 0;
+    if (after !== undefined) {
+      start = ranked.findIndex(
+        hit => hit.score < after.score || (hit.score === after.score && hit.id > after.id),
+      );
+      if (start === -1) start = ranked.length;
+    }
+
+    const page = ranked.slice(start, start + limit);
+    const hasMore = start + page.length < ranked.length;
+    const last = page[page.length - 1];
+    return {
+      resources: page.map(hit => this.hydrateById(hit.id)),
+      partialResults: hasMore || cappedRetrieval,
+      nextCursor:
+        hasMore && last !== undefined
+          ? encodeCursor({ contextHash, score: last.score, id: last.id })
+          : null,
+    };
+  }
+
+  /**
+   * Applies the list-endpoint filter semantics to a set of candidate row ids.
+   *
+   * @param ids - Candidate `resources.id` values from the retriever.
+   * @param params - The filter values (query/limit/cursor fields ignored).
+   * @returns The subset of ids whose listings pass every supplied filter.
+   */
+  private filterResourceIds(ids: number[], params: SearchParams): Set<number> {
+    const { where, args } = buildFilterConditions(params);
+    if (where.length === 0) {
+      // Nothing to filter on; FTS rows and catalog rows are transactionally
+      // in sync, so every retrieved id is a live listing.
+      return new Set(ids);
+    }
+    const placeholders = ids.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(
+        `SELECT r.id FROM resources r
+         WHERE r.id IN (${placeholders}) AND ${where.join(" AND ")}`,
+      )
+      .all(...ids, ...args) as unknown as Array<{ id: number | bigint }>;
+    return new Set(rows.map(row => Number(row.id)));
+  }
+
+  /**
+   * Hydrates one listing by row id. The id comes from the search index, which
+   * is transactionally consistent with the catalog, so the row must exist.
+   *
+   * @param id - The `resources.id` value.
+   * @returns The hydrated listing.
+   */
+  private hydrateById(id: number): CatalogListing {
+    const row = this.db.prepare("SELECT * FROM resources WHERE id = ?").get(id) as
+      | ResourceRow
+      | undefined;
+    if (row === undefined) {
+      throw new Error(`search index row ${id} has no catalog row — index out of sync`);
+    }
+    return this.hydrate(row);
   }
 
   /**
@@ -484,6 +667,63 @@ export class BazaarStore {
       settleCount: Number(row.settle_count),
     };
   }
+}
+
+/**
+ * Builds the SQL conditions for the shared discovery filter semantics
+ * (FACTS F-025): `type` matches the listing discriminator; `extensions`
+ * matches an extension key present on the listing; `payTo`, `scheme`, and
+ * `network` must all match within the SAME accepts entry — together they
+ * describe one payment option, and a listing should not match
+ * `payTo=X&network=Y` merely because X appears on one option and Y on
+ * another. Used by both `list()` and `search()` so the two endpoints can
+ * never drift apart on what a filter means.
+ *
+ * @param params - The filter values; other fields are ignored.
+ * @returns WHERE fragments (over alias `r`) and their positional arguments.
+ */
+function buildFilterConditions(params: {
+  type?: string;
+  payTo?: string;
+  scheme?: string;
+  network?: string;
+  extensions?: string;
+}): { where: string[]; args: (string | number)[] } {
+  const where: string[] = [];
+  const args: (string | number)[] = [];
+
+  if (params.type !== undefined) {
+    where.push("r.type = ?");
+    args.push(params.type);
+  }
+  if (params.extensions !== undefined) {
+    where.push(
+      "EXISTS (SELECT 1 FROM extension_keys ek WHERE ek.resource_id = r.id AND ek.key = ?)",
+    );
+    args.push(params.extensions);
+  }
+  const acceptsConds: string[] = [];
+  const acceptsArgs: string[] = [];
+  if (params.payTo !== undefined) {
+    acceptsConds.push("a.pay_to = ?");
+    acceptsArgs.push(params.payTo);
+  }
+  if (params.scheme !== undefined) {
+    acceptsConds.push("a.scheme = ?");
+    acceptsArgs.push(params.scheme);
+  }
+  if (params.network !== undefined) {
+    acceptsConds.push("a.network = ?");
+    acceptsArgs.push(params.network);
+  }
+  if (acceptsConds.length > 0) {
+    where.push(
+      `EXISTS (SELECT 1 FROM accepts a WHERE a.resource_id = r.id AND ${acceptsConds.join(" AND ")})`,
+    );
+    args.push(...acceptsArgs);
+  }
+
+  return { where, args };
 }
 
 /**

@@ -4,8 +4,11 @@ import {
   clampLimit,
   encodeExtensionResponses,
   indexSettledPayment,
+  InvalidCursorError,
   toListResponse,
+  toSearchResponse,
   type ListParams,
+  type SearchParams,
 } from "@walras/bazaar";
 import type { x402Facilitator } from "@x402/core/facilitator";
 import type {
@@ -301,10 +304,65 @@ function parseListQuery(query: Record<string, unknown>): ListParams {
 }
 
 /**
+ * Parses the `GET /discovery/search` query string.
+ *
+ * Same interpretation split as the list endpoint: uninterpretable values
+ * (repeated parameters, non-numeric limit) are named 400s; out-of-range
+ * limits are clamped. `query` is the spec's one required parameter
+ * (FACTS F-026 — named `query`, not `q`; DECISIONS D-006) and an empty or
+ * whitespace value is treated as missing: it contains no searchable tokens,
+ * and a named rejection beats an empty page that looks like a real answer.
+ * The cursor is passed through opaquely — the store validates it and throws
+ * `InvalidCursorError`, which the route maps to its own named 400.
+ *
+ * @param query - Fastify's parsed query object.
+ * @returns Store-ready search parameters.
+ * @throws {WalrasRejection} When `query` is missing or a parameter cannot be
+ *   interpreted.
+ */
+function parseSearchQuery(query: Record<string, unknown>): SearchParams {
+  const readString = (
+    key: "query" | "type" | "payTo" | "scheme" | "network" | "extensions" | "cursor",
+  ): string | undefined => {
+    const raw = query[key];
+    if (raw === undefined) return undefined;
+    if (typeof raw !== "string") {
+      throw new WalrasRejection("walras_invalid_query_parameter", {
+        detail: `Parameter '${key}' must appear at most once.`,
+      });
+    }
+    return raw;
+  };
+
+  const q = readString("query");
+  if (q === undefined || q.trim().length === 0) {
+    throw new WalrasRejection("walras_missing_search_query");
+  }
+
+  const params: SearchParams = { query: q };
+  for (const key of ["type", "payTo", "scheme", "network", "extensions", "cursor"] as const) {
+    const value = readString(key);
+    if (value !== undefined) params[key] = value;
+  }
+
+  const rawLimit = query.limit;
+  if (rawLimit !== undefined) {
+    if (typeof rawLimit !== "string" || !/^\d+$/.test(rawLimit)) {
+      throw new WalrasRejection("walras_invalid_query_parameter", {
+        detail: `Parameter 'limit' must be a non-negative integer, got ${JSON.stringify(rawLimit)}.`,
+      });
+    }
+    params.limit = clampLimit(Number.parseInt(rawLimit, 10));
+  }
+
+  return params;
+}
+
+/**
  * Builds the facilitator HTTP server.
  *
  * Routes — the x402 v2 spec section 7 payment surface plus the bazaar
- * discovery list endpoint (spec `specs/extensions/bazaar.md` §Optional
+ * discovery endpoints (spec `specs/extensions/bazaar.md` §Optional
  * Discovery Endpoints):
  *
  * | Method | Path                    | Purpose                                    |
@@ -313,6 +371,7 @@ function parseListQuery(query: Record<string, unknown>): ListParams {
  * | POST   | `/settle`               | Settle a payment on-chain                  |
  * | GET    | `/supported`            | Advertise kinds, extensions, and signers   |
  * | GET    | `/discovery/resources`  | Browse the settle-gated resource catalog   |
+ * | GET    | `/discovery/search`     | Rank the catalog against a natural-language query |
  * | GET    | `/health`               | Operational readiness (not part of x402)   |
  *
  * @param options - Server construction options.
@@ -445,6 +504,34 @@ export function buildServer(options: BuildServerOptions): FastifyInstance {
       throw error;
     }
     return reply.code(200).send(toListResponse(bazaarStore.list(params)));
+  });
+
+  app.get("/discovery/search", async (request, reply) => {
+    // Spec shape throughout (FACTS F-026 … F-028): required natural-language
+    // `query`, the same five filters as the list endpoint, advisory
+    // limit/cursor in; a `resources` array (never `items`, DECISIONS D-001),
+    // an explicit `partialResults`, and pagination as {limit, cursor} out.
+    // Real cursor pagination is deliberate over-delivery against the spec's
+    // MAY, per D-003 and RFP 3.2.
+    try {
+      const params = parseSearchQuery(request.query as Record<string, unknown>);
+      return await reply.code(200).send(toSearchResponse(bazaarStore.search(params)));
+    } catch (error) {
+      if (error instanceof WalrasRejection) {
+        return reply
+          .code(error.httpStatus)
+          .send({ error: { code: error.code, reason: error.reason } });
+      }
+      if (error instanceof InvalidCursorError) {
+        const rejection = new WalrasRejection("walras_invalid_search_cursor", {
+          detail: error.message,
+        });
+        return reply
+          .code(rejection.httpStatus)
+          .send({ error: { code: rejection.code, reason: rejection.reason } });
+      }
+      throw error;
+    }
   });
 
   app.get("/supported", async (_request, reply) => {

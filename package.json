@@ -17,9 +17,12 @@
     "check:licenses": "node scripts/license-scan.mjs",
     "preflight": "node scripts/preflight.mjs",
     "fixtures": "node scripts/build-fixtures.mjs",
-    "dev:facilitator": "pnpm --filter @walras/facilitator dev"
+    "dev:facilitator": "pnpm --filter @walras/facilitator dev",
+    "eval:search": "pnpm --filter @walras/bazaar build && node eval/search/run.mjs"
   },
   "devDependencies": {
-    "@stellar/stellar-sdk": "^16.2.0"
+    "@stellar/stellar-sdk": "^16.2.0",
+    "@walras/bazaar": "workspace:*",
+    "@x402/extensions": "2.20.0"
   }
 }

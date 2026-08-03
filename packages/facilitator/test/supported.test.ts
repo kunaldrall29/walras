@@ -124,9 +124,9 @@ describe("unknown routes", () => {
   it("returns a machine-readable code rather than a bare 404", async () => {
     harness = await startHarness();
 
-    // /discovery/search is real in the spec but not mounted yet — precisely the
-    // kind of probe that must get a named rejection, not a silent 404 (D-016).
-    const response = await harness.app.inject({ method: "GET", url: "/discovery/search" });
+    // Session 3 pinned /discovery/search here as unmounted-but-named; Session 4
+    // mounted it, so the probe moves to a route that stays unknown.
+    const response = await harness.app.inject({ method: "GET", url: "/discovery/nonexistent" });
 
     expect(response.statusCode).toBe(404);
     const body = response.json();

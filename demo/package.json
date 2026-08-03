@@ -11,6 +11,7 @@
   "scripts": {
     "seller": "tsx seller.ts",
     "buyer": "tsx buyer.ts",
+    "seed": "tsx seed-catalog.ts",
     "hostile": "tsx hostile-client.ts"
   },
   "dependencies": {

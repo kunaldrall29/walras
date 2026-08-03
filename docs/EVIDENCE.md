@@ -1356,11 +1356,113 @@ buyer 19.979 → **19.959** (two 0.01 payments; self-transfer net zero), seller
 
 ---
 
+## S4-1 — Gate G4.1: catalog seeded by 11 real settlements on `stellar:testnet` (2026-08-03)
+
+Topology unchanged from S3-3 (walras dist :4021 ← stock seller :4022 ← stock buyer), but
+the seller's route table is now data-driven from `eval/search/corpus.json` — 11 resources
+in four deliberately overlapping vocabulary clusters (weather/air, finance/markets,
+geo/network, language), each with per-parameter JSON-Schema descriptions, 9 × GET +
+2 × POST. The catalog was populated the only way walras allows: one real settled payment
+per resource (`demo/seed-catalog.ts`, stock `@x402/fetch` path throughout).
+
+All 11 settlements succeeded, $0.01 USDC each:
+
+```
+weather-current  48cfaea1512ff4d656ef0dbb89e01e4aca33404bdff1de9820aa3e87f08eb8fe
+weather-history  506d79617326334769232db8936802e6a7d87b41a8ef6802bb07ac9e92086650
+air-quality      a6250266706821deaccf92397309db53546a0177d3449b54ec690f0732efd132
+fx-rates         810cfdd0ac2b7c5f1432974d3b4f16dad084df193712311e65e1abaabf174dde
+stock-quote      784ae3d9697fb7b460d7aeebb5d20901cbbadfa6e766c88007c70be33333d8b8
+crypto-price     b457b20f577c9bf4ef67a1e824296208fca5e5fdb2c8ff0573ba69edeb636f8a
+geocode-forward  ab5b59e16bc5d06e3b3990d34a0034321d8e528c64375b4ae5b2c3bbc90381ed
+geocode-reverse  fef8962b4ff67934dce0229248e4d90e532e42ecbfe2502f40908b5899703cce
+ip-info          6943b27c260b81d0cea84ac7ab8cf12562c43fbf1252a567ec2c2741aafc56f8
+sentiment        5adbe87a434b0495c6734dfe3145eb6f5b8ec339a210b279f36b1410e9927a86
+translate        ad763c3912af2ad8b8c8d6439aadb518e29dab9d1b8e420197216b8c44f7d08b
+```
+
+Horizon spot-checks (first and last): `48cfaea1…` ledger 3936817 and `ad763c39…` ledger
+3936837, both `successful: true`, both `fee_charged: 22973` — the S2 measured constant
+(F-069) exactly, sourced by the walras submitter `GATIEP…`. Immediately after:
+`GET /discovery/resources?limit=100` → `pagination.total: 11`, with per-parameter
+descriptions verified present in the stored `extensions.bazaar.schema` for both the GET
+(`queryParams`) and POST (`body`) shapes. **G4.1 PASS** (≥5 required, 11 seeded).
+Catalog listing: `demo-logs/catalog-s4-after-seed.json`.
+
+---
+
+## S4-2 — FTS5/BM25 availability probe on the pinned toolchain (2026-08-03)
+
+Live probe on Node v24.14.0, `node:sqlite`:
+
+- `PRAGMA compile_options` includes **`ENABLE_FTS5`**; `sqlite_version()` = **3.51.2**.
+- FTS5 virtual table + `bm25()` work; scores are **negative**, smaller = more relevant
+  (`ORDER BY rank` ascending = best first): match on "weather forecast" scored
+  `-1.4563…`.
+- Raw operator text in MATCH **throws**: `what's the "best- weather: today? (NEAR` →
+  `fts5: syntax error near "'"`. Quoted-token form `"weather" OR "best" OR "today"`
+  returns ranked rows. This is why the retriever compiles untrusted queries instead of
+  passing them through (D-026).
+
+Recorded as F-076.
+
+---
+
+## S4-3 — Test suite and baseline search-quality numbers (2026-08-03)
+
+`pnpm test`: **157/157** (bazaar 64, facilitator 93) — up from 132 in S3. New coverage:
+sanitizer hostility, ranking sanity, per-param-description matching, FTS/catalog
+transactional sync (incl. ownership-conflict leaves index untouched), backfill of a
+pre-search database, exactly-once cursor walks, foreign/malformed cursor rejections,
+retrieval-cap honesty, and the endpoint's spec shape + rejection codes.
+
+`pnpm eval:search` (BASELINE fts5-bm25, weights name 4 / desc 2 / params 1 / tags 3;
+fixture catalog built through the production indexer; corpus sha256 `094a953dfa0ecafb…`):
+
+| Metric | Value |
+|---|---|
+| recall@1 | **0.839** |
+| recall@3 | **0.929** |
+| recall@5 | **0.929** |
+| MRR@10 | **0.911** |
+| nDCG@5 / nDCG@10 | **0.909** / **0.909** |
+| zero-result queries | 0 / 28 |
+
+The misses are exactly the planted vocabulary-gap probes: "convert US dollars to euros"
+(corpus says USD/EUR) and "did it snow in Oslo in January 2019" (corpus says "snowfall";
+no stemming) rank wrong resources first via stopword noise ('to', 'in' match parameter
+prose); "apple share price today" ranks crypto-price above stock-quote (no
+apple→AAPL knowledge). These are the measured acceptance tests for the GRANT-scope
+upgrades (ARCHITECTURE §7.3). Full per-query table:
+`eval/search/results/2026-08-03.json`.
+
+---
+
+## S4-4 — Live `/discovery/search` on the seeded testnet catalog (2026-08-03)
+
+The facilitator was restarted on the S4 build over the S4-1 catalog — a database created
+by the pre-search schema — and the open-time backfill indexed all 11 listings with no
+migration step. Probe transcript (`demo-logs/search-s4-live.log`):
+
+- `query=usd eur exchange rate&limit=3` → `resources: [fx/rates, crypto/price]`,
+  `partialResults: false`, `pagination: {limit: 2, cursor: null}` — note `limit` is the
+  count in this page (F-077), and the requested 3 was not padded.
+- Cursor walk, `limit=4` over a 7-token query matching 10 listings: pages of 4 + 4 + 2,
+  `partialResults` true → true → false, final cursor `null`, **10 unique resources, no
+  duplicates** — exactly-once confirmed on the live wire.
+- Filters: `payTo=<seller>&network=stellar:testnet&type=http` narrows; a wrong network
+  returns `resources: []` with `partialResults: false`.
+- Rejections, all machine-readable: missing query → 400
+  `walras_missing_search_query`; foreign cursor `eyJ2Ijo5OX0` → 400
+  `walras_invalid_search_cursor`; and the hostile-syntax query
+  `"weather: (NEAR today*" -` → **200 with sane ranked results** (the sanitizer, live).
+
+---
+
 ## Not yet captured
 
 | Section | Blocked on |
 |---|---|
-| **S4 Search endpoint + eval metrics** | S4 implementation (`/discovery/search` is deliberately 404 until then, D-016 logic). |
 | **S5 Demo run + recording** | S5. |
 | **Fee-bump settlement by walras** | Config only (`FEE_BUMP_SECRET` + a funded fee account); knob shipped and unit-tested in S1. See D-021. |
 | **MCP tool cataloged from a live MCP seller** | Tuple keying is store/indexer-proven (S3-2); a live MCP seller demo is S5 scope. |

@@ -19,16 +19,29 @@ Every design claim here cites a row in [`FACTS.md`](./FACTS.md) or an entry in
 walras/
 ├── docs/                        # FACTS, DECISIONS, EVIDENCE, rfp, this file
 ├── packages/
-│   └── facilitator/             # x402 facilitator over stellar:testnet   ← built (S1)
-│       ├── src/
-│       │   ├── config.ts        # environment surface, validated at boot
-│       │   ├── errors.ts        # the two reason-code taxonomies
-│       │   ├── facilitator.ts   # config -> ExactStellarScheme -> x402Facilitator
-│       │   ├── server.ts        # Fastify app: /verify, /settle, /supported, /health
-│       │   └── index.ts         # boot: load env, build, listen
-│       └── test/
-│           ├── fixtures/        # generated payment payloads (see §5)
-│           └── helpers/         # Soroban RPC double, test harness
+│   ├── facilitator/             # x402 facilitator over stellar:testnet   ← built (S1–S4)
+│   │   ├── src/
+│   │   │   ├── config.ts        # environment surface, validated at boot
+│   │   │   ├── errors.ts        # the two reason-code taxonomies
+│   │   │   ├── facilitator.ts   # config -> ExactStellarScheme -> x402Facilitator
+│   │   │   ├── server.ts        # Fastify app: /verify, /settle, /supported,
+│   │   │   │                    #   /discovery/resources, /discovery/search, /health
+│   │   │   └── index.ts         # boot: load env, build, listen
+│   │   └── test/
+│   │       ├── fixtures/        # generated payment payloads (see §5)
+│   │       └── helpers/         # Soroban RPC double, test harness
+│   └── bazaar/                  # settle-gated discovery catalog          ← built (S3–S4)
+│       └── src/
+│           ├── store.ts         # SQLite (WAL, node:sqlite) persistence + search
+│           ├── indexer.ts       # the trust boundary for hostile extension payloads
+│           ├── retriever.ts     # Retriever seam + BASELINE FTS5/BM25 impl (see §7)
+│           ├── searchtext.ts    # param names + schema descriptions -> search text
+│           ├── cursor.ts        # opaque keyset cursor for /discovery/search
+│           ├── reasons.ts       # bazaar_* soft-drop codes
+│           └── wire.ts          # DiscoveryResource mapping, EXTENSION-RESPONSES
+├── demo/                        # stock seller + buyer + hostile client (S2–S4)
+├── eval/
+│   └── search/                  # labeled queries + metrics harness (see §7.2)
 ├── scripts/
 │   ├── setup-accounts.mjs       # one-shot testnet account creation (Session 0)
 │   ├── preflight.mjs            # gate G1.3: submitter funded, RPC reachable
@@ -39,18 +52,13 @@ walras/
 └── tsconfig.base.json           # strict TypeScript, shared by every package
 ```
 
-Planned, **not built**:
-
-| Package | Purpose | Session |
-| --- | --- | --- |
-| `packages/catalog` | Bazaar persistence, indexing, retention | S3 |
-| `packages/discovery` | `GET /discovery/resources`, `GET /discovery/search` | S3 / S4 |
-| `packages/mcp` | MCP surface over the catalog | S4 |
+Planned, **not built**: `packages/mcp` (MCP surface over the catalog — S5/proposal scope).
 
 The split is along the seam the spec itself draws. `bazaar.md` says storing, indexing, and
 exposing discovered resources is "an implementation detail" of the facilitator
-(FACTS F-023) — so discovery is a separate package that the facilitator can run without,
-and the facilitator is a payment component that has no opinion about catalogs.
+(FACTS F-023) — so discovery lives in `packages/bazaar`, a transport-free library the
+facilitator mounts; the facilitator remains a payment component whose only catalog
+knowledge is the settle-success hook and two GET routes.
 
 ## 2. Toolchain
 
@@ -242,8 +250,70 @@ phrase, not the real Session 0 submitter — the facilitator-safety cases need t
 facilitator's own address inside a transaction, and using the real one would make the suite
 depend on a gitignored secret and refuse to run in CI.
 
-## 6. What Session 1 did not build
+## 6. Discovery layer (`packages/bazaar`, Sessions 3–4)
 
-Explicitly out of scope, per the session brief: discovery endpoints, search, and MCP. The
-`bazaar` extension is not registered and not advertised. `DB_PATH` is parsed but nothing is
-persisted.
+Three layers, deliberately transport-free so the facilitator owns all HTTP concerns:
+
+- **store** — SQLite via Node's built-in `node:sqlite` (WAL, zero added dependencies;
+  DECISIONS D-023). Listings are keyed on `(resource, type, toolName)` per the spec's MCP
+  tuple MUST (FACTS F-029) and owned by the first settled `payTo` (D-024).
+- **indexer** — the trust boundary. Everything echoed by the client is treated as hostile
+  and admitted only through the SDK's low-level validators composed correctly
+  (FACTS F-072); every rejection carries a machine code, and an indexer fault can degrade
+  discovery but never a settlement (D-015).
+- **wire** — mapping to the stock SDK's `DiscoveryResource` shape and the
+  `EXTENSION-RESPONSES` header (F-024, F-050).
+
+Cataloging is settle-gated: a listing exists because a payment settled on-chain through
+walras, which is a deliberate anti-spam policy, not spec conformance (D-004).
+
+## 7. Search (`GET /discovery/search`, Session 4)
+
+The endpoint is spec-shaped end to end (FACTS F-026 … F-028): required `query` parameter
+(never `q`, D-006), the same five filters as the list endpoint, a `resources` array
+(never `items`, D-001), an explicit `partialResults`, and real keyset cursor pagination —
+deliberate over-delivery against the spec's advisory MAY, per D-003 and RFP 3.2; no
+reference operator implements it (F-013).
+
+The pipeline: a **`Retriever`** ranks catalog rows for the query; the shared filter
+semantics intersect that ranking; the cursor slices it. `Retriever` is a one-method seam
+(`query → ranked ids + scores`), so ranking improvements never touch the wire contract,
+the filters, or pagination.
+
+### 7.1 BASELINE retriever
+
+The pre-build ships exactly one retriever, labeled BASELINE (D-026): SQLite **FTS5 with
+BM25** over four weighted fields — service name, description, parameter text (names and
+JSON-Schema `description` annotations extracted from the bazaar extension; example values
+are deliberately not indexed), and tags. Untrusted queries are compiled to
+quoted-token-OR MATCH expressions, since raw FTS5 syntax throws (F-076). There is no
+stemming, no stopword handling, no synonym expansion, no semantic matching — and the eval
+set contains queries chosen to fail on exactly those gaps ("convert US dollars to euros"
+against a corpus that says USD/EUR).
+
+### 7.2 Evaluation harness — how result quality is measured over time
+
+`pnpm eval:search` builds a fixture catalog from `eval/search/corpus.json` **through the
+production indexing path**, runs the ~28 labeled queries in `eval/search/queries.json`,
+and reports recall@1/3/5, MRR@10, and nDCG@5/10, writing
+`eval/search/results/<date>.json`. Baseline numbers are recorded in EVIDENCE S4-3. This
+harness is the answer to the RFP's "how will you evaluate result quality over time": a
+ranking change is graded by re-running one command and diffing numbers, never by
+eyeballing results.
+
+### 7.3 Ranking upgrade path — GRANT scope
+
+Not in the pre-build (its DO-NOT list forbids embedding/vector dependencies). For the
+funded build, in measurement order:
+
+1. **Lexical hygiene** — stopword handling and light stemming inside the BASELINE
+   retriever (the eval set's "did it snow…" query documents the cost of their absence).
+2. **Hybrid retrieval** — BM25 candidates fused with embedding-based dense retrieval
+   (reciprocal-rank fusion first, learned weights only if the harness justifies them);
+   embeddings computed at index time in the settle hook's existing budget discipline.
+3. **Re-ranking** — a cross-encoder pass over the fused top-k, feasible because the
+   catalog page size is bounded.
+
+Each step lands only if it moves the harness's numbers on a labeled set that grows with
+the catalog; the vocabulary-gap queries that score zero today are the acceptance tests
+for step 2.

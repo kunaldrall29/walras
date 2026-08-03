@@ -1,0 +1,33 @@
+{
+  "$comment": "Labeled query set for the walras search evaluation harness. Each query maps corpus resource ids (eval/search/corpus.json) to graded relevance gains: 3 = the resource the query is asking for, 2 = a strong alternate answer, 1 = topically acceptable. Labels describe what an IDEAL engine should return — several queries (e.g. 'convert US dollars to euros') deliberately share no vocabulary with their target so the lexical BASELINE scores zero on them; those failures are the measured motivation for the GRANT-scope ranking upgrades (docs/ARCHITECTURE.md). Binary relevance for recall/MRR is gain >= 2; nDCG uses the graded gains.",
+  "queries": [
+    { "query": "current weather in Zurich", "relevant": { "weather-current": 3, "weather-history": 1 } },
+    { "query": "what is the temperature outside right now", "relevant": { "weather-current": 3 } },
+    { "query": "historical temperature records for a past date", "relevant": { "weather-history": 3, "weather-current": 1 } },
+    { "query": "did it snow in Oslo in January 2019", "relevant": { "weather-history": 3 } },
+    { "query": "air pollution levels in my city", "relevant": { "air-quality": 3 } },
+    { "query": "pm2.5 and ozone concentration readings", "relevant": { "air-quality": 3 } },
+    { "query": "convert US dollars to euros", "relevant": { "fx-rates": 3 } },
+    { "query": "usd to eur exchange rate", "relevant": { "fx-rates": 3 } },
+    { "query": "live foreign exchange rates for currency pairs", "relevant": { "fx-rates": 3 } },
+    { "query": "apple share price today", "relevant": { "stock-quote": 3 } },
+    { "query": "stock quote for ticker AAPL", "relevant": { "stock-quote": 3 } },
+    { "query": "bitcoin price in dollars", "relevant": { "crypto-price": 3 } },
+    { "query": "spot price of XLM cryptocurrency", "relevant": { "crypto-price": 3 } },
+    { "query": "trading volume for a listed company", "relevant": { "stock-quote": 3 } },
+    { "query": "turn a street address into coordinates", "relevant": { "geocode-forward": 3, "geocode-reverse": 2 } },
+    { "query": "latitude and longitude for an address", "relevant": { "geocode-forward": 3, "geocode-reverse": 2 } },
+    { "query": "find the nearest address to gps coordinates", "relevant": { "geocode-reverse": 3, "geocode-forward": 2 } },
+    { "query": "reverse geocode a lat lon point", "relevant": { "geocode-reverse": 3 } },
+    { "query": "where is this IP address located", "relevant": { "ip-info": 3 } },
+    { "query": "detect vpn or proxy usage for an ip", "relevant": { "ip-info": 3 } },
+    { "query": "which ISP announces this network address", "relevant": { "ip-info": 3 } },
+    { "query": "is this customer review positive or negative", "relevant": { "sentiment": 3 } },
+    { "query": "sentiment analysis with confidence score", "relevant": { "sentiment": 3 } },
+    { "query": "classify the tone of a paragraph of text", "relevant": { "sentiment": 3 } },
+    { "query": "translate german text to english", "relevant": { "translate": 3 } },
+    { "query": "machine translation between languages", "relevant": { "translate": 3 } },
+    { "query": "detect the source language of a text automatically", "relevant": { "translate": 3 } },
+    { "query": "city temperature and wind forecast", "relevant": { "weather-current": 3, "weather-history": 1 } }
+  ]
+}

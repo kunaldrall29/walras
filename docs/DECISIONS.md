@@ -451,3 +451,54 @@ payload that is fine. The settle response body is never touched by any of this.
 **Decision:** two statuses + omission, exactly as above; the D-015 forced-failure test
 pins the omission path. Revisit `processing` only if the funded build moves indexing off
 the request thread.
+
+---
+
+## D-026 — Search ranking is a labeled BASELINE: FTS5/BM25, lexical only, behind a one-method seam.
+**Status:** ADOPTED · 2026-08-03 · Evidence: F-076; EVIDENCE S4-2, S4-3
+
+The RFP asks for natural-language search *and* for how result quality will be evaluated
+over time. The honest pre-build answer is a deliberately simple retriever plus the
+harness that measures it — not a sophisticated-looking ranker with no measurement. The
+pre-build DO-NOT list also forbids embedding/vector dependencies outright.
+
+**Decision:** one `Retriever` implementation, labeled BASELINE in code and docs:
+SQLite FTS5 with BM25 (built into `node:sqlite`, zero added dependencies — F-076) over
+four weighted fields: service name (4.0), description (2.0), parameter text (1.0), tags
+(3.0). Weights are rule-of-thumb, explicitly untuned. Parameter text is parameter NAMES
+plus JSON-Schema `description` annotations extracted from the echoed bazaar extension;
+example VALUES are excluded (an example city of "Zurich" says nothing about what a
+resource does). Untrusted queries are compiled to quoted-token OR expressions because raw
+FTS5 MATCH syntax throws (F-076); OR over AND so filler words cannot veto results — BM25
+still ranks multi-term matches first. No stemming, no stopwords, no synonyms: the eval
+set deliberately includes queries that fail on each gap, and those failures — recorded in
+EVIDENCE S4-3 — are the measured motivation for the GRANT-scope upgrades
+(ARCHITECTURE §7.3). The FTS index is maintained in the same transaction as the catalog
+row and backfilled on open for pre-search databases, so the index can never drift from
+the catalog.
+
+---
+
+## D-027 — Search pagination: real keyset cursor, integrity-bound; `partialResults` means exactly "matches were truncated".
+**Status:** ADOPTED · 2026-08-03 · Evidence: F-026, F-028, F-013; EVIDENCE S4-4
+
+D-003 committed to real cursor pagination against the spec's advisory MAY. The mechanics:
+
+- **Cursor** = base64url JSON `{v, h, s, i}`: format version, a hash binding the cursor
+  to its (query, filters) context, and the keyset position (score, id) of the last row
+  seen. Keyset, not offset — under a static catalog a walk visits every match exactly
+  once. IEEE doubles round-trip JSON exactly, so the score comparison is precise. The
+  binding hash turns a cursor replayed against a different query into a named 400
+  (`walras_invalid_search_cursor`) instead of a silently wrong page; it is integrity
+  against confusion, not secrecy.
+- **`partialResults`** is emitted explicitly on every response and is `true` exactly when
+  matches were truncated from it (F-028): a further page exists, or retrieval hit the
+  `MAX_SEARCH_RETRIEVE` cap (1000) — in the capped case it stays `true` through the last
+  page, because claiming completeness there would be false.
+- **`pagination.limit`** is the count of results in THIS page — the spec's literal
+  reading ("Number of results in this page"), not the requested maximum, which differs
+  from the list endpoint's semantics.
+- **`limit`** reuses the list defaults (20, clamped 1–100, F-025) since the spec assigns
+  search no bounds of its own; `query` is required and named `query` (D-006), with a
+  dedicated 400 (`walras_missing_search_query`) whose text points hand-typed `q=` callers
+  at the right name.

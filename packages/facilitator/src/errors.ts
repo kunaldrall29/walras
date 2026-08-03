@@ -97,6 +97,10 @@ export const WALRAS_REASON_CODES = [
   "walras_unknown_route",
   /** A discovery query parameter could not be interpreted (e.g. non-numeric limit). */
   "walras_invalid_query_parameter",
+  /** GET /discovery/search was called without the required `query` parameter. */
+  "walras_missing_search_query",
+  /** A search cursor was malformed or minted for a different query/filter combination. */
+  "walras_invalid_search_cursor",
   /** Unhandled fault inside the wrapper. Never a statement about the payment. */
   "walras_internal_error",
 ] as const;
@@ -208,9 +212,13 @@ export const REASON_TEXT: Record<ReasonCode, string> = {
   walras_unsupported_kind:
     "The (scheme, network) pair is not advertised by this facilitator. See GET /supported.",
   walras_unknown_route:
-    "No route is mounted at this method and path. This facilitator serves POST /verify, POST /settle, GET /supported, GET /discovery/resources, and GET /health.",
+    "No route is mounted at this method and path. This facilitator serves POST /verify, POST /settle, GET /supported, GET /discovery/resources, GET /discovery/search, and GET /health.",
   walras_invalid_query_parameter:
     "A query parameter could not be interpreted. limit and offset must be non-negative integers; filter parameters must not repeat.",
+  walras_missing_search_query:
+    "GET /discovery/search requires a non-empty 'query' parameter. See specs/extensions/bazaar.md — the parameter is named 'query', not 'q'.",
+  walras_invalid_search_cursor:
+    "The 'cursor' parameter is not a cursor this facilitator issued for this query and filter combination. Repeat the search without a cursor to start a new walk.",
   walras_internal_error:
     "The facilitator failed to process the request. This says nothing about the payment's validity.",
 };

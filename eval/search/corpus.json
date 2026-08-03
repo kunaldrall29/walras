@@ -1,0 +1,212 @@
+{
+  "$comment": "Seed corpus for the walras demo catalog and the search evaluation harness. Single source of truth: demo/seller.ts builds its route config from these entries (stock declareDiscoveryExtension), demo/seed-catalog.ts pays each route through walras so the LIVE catalog is populated by real settlements (gate G4.1), and eval/search/run.mjs builds an identical fixture catalog through the same indexer trust boundary. Eleven resources in four deliberately overlapping vocabulary clusters (weather/air, finance/markets, geo/network, language) so that ranking between near-neighbours is non-trivial. Field constraints mirror the soft-drop rules the indexer enforces (FACTS F-031): serviceName <= 32 printable ASCII chars, <= 5 tags of <= 32 chars each.",
+  "origin": "http://127.0.0.1:4022",
+  "resources": [
+    {
+      "id": "weather-current",
+      "method": "GET",
+      "path": "/weather",
+      "price": "$0.01",
+      "description": "Current weather conditions for any city right now: temperature, sky condition, wind speed, and humidity.",
+      "mimeType": "application/json",
+      "serviceName": "Walras Demo Weather",
+      "tags": ["weather", "current", "conditions", "forecast"],
+      "exampleInput": { "city": "Zurich", "units": "metric" },
+      "inputSchema": {
+        "properties": {
+          "city": { "type": "string", "description": "City name to report the current weather for, for example Zurich or Mumbai" },
+          "units": { "type": "string", "description": "Unit system for temperature and wind speed: metric for Celsius, imperial for Fahrenheit" }
+        },
+        "required": ["city"]
+      },
+      "output": { "example": { "city": "Zurich", "condition": "sunny", "temperatureC": 24, "windKph": 11, "humidityPct": 48 } }
+    },
+    {
+      "id": "weather-history",
+      "method": "GET",
+      "path": "/weather/history",
+      "price": "$0.01",
+      "description": "Historical daily weather for a city on a past date: recorded high and low temperature, precipitation, and snowfall.",
+      "mimeType": "application/json",
+      "serviceName": "Walras Demo Weather",
+      "tags": ["weather", "history", "archive", "climate"],
+      "exampleInput": { "city": "Oslo", "date": "2019-01-15" },
+      "inputSchema": {
+        "properties": {
+          "city": { "type": "string", "description": "City to fetch the historical weather record for" },
+          "date": { "type": "string", "description": "Calendar day to look up as ISO 8601 YYYY-MM-DD, up to ten years back" }
+        },
+        "required": ["city", "date"]
+      },
+      "output": { "example": { "city": "Oslo", "date": "2019-01-15", "highC": -2, "lowC": -11, "precipitationMm": 0.4, "snowfallCm": 3 } }
+    },
+    {
+      "id": "air-quality",
+      "method": "GET",
+      "path": "/air/quality",
+      "price": "$0.01",
+      "description": "Air quality index for a city: AQI value, dominant pollutant, and PM2.5, PM10, and ozone concentrations.",
+      "mimeType": "application/json",
+      "serviceName": "Walras Demo Air",
+      "tags": ["air", "aqi", "pollution", "environment"],
+      "exampleInput": { "city": "Delhi" },
+      "inputSchema": {
+        "properties": {
+          "city": { "type": "string", "description": "City to measure air quality in" }
+        },
+        "required": ["city"]
+      },
+      "output": { "example": { "city": "Delhi", "aqi": 178, "dominantPollutant": "pm25", "pm25": 108.2, "pm10": 190.5, "ozonePpb": 31 } }
+    },
+    {
+      "id": "fx-rates",
+      "method": "GET",
+      "path": "/fx/rates",
+      "price": "$0.01",
+      "description": "Mid-market foreign exchange rate between two fiat currencies, refreshed every minute.",
+      "mimeType": "application/json",
+      "serviceName": "Walras Demo FX",
+      "tags": ["finance", "currency", "exchange", "forex"],
+      "exampleInput": { "base": "USD", "quote": "EUR" },
+      "inputSchema": {
+        "properties": {
+          "base": { "type": "string", "description": "Base fiat currency as an ISO 4217 code, for example USD" },
+          "quote": { "type": "string", "description": "Quote fiat currency as an ISO 4217 code, for example EUR" }
+        },
+        "required": ["base", "quote"]
+      },
+      "output": { "example": { "base": "USD", "quote": "EUR", "rate": 0.9184, "asOf": "2026-08-02T12:00:00Z" } }
+    },
+    {
+      "id": "stock-quote",
+      "method": "GET",
+      "path": "/stocks/quote",
+      "price": "$0.01",
+      "description": "Delayed stock market quote for a listed company: last trade price, day change percent, and trading volume.",
+      "mimeType": "application/json",
+      "serviceName": "Walras Demo Markets",
+      "tags": ["finance", "stocks", "equities", "market"],
+      "exampleInput": { "ticker": "AAPL" },
+      "inputSchema": {
+        "properties": {
+          "ticker": { "type": "string", "description": "Stock ticker symbol of the listed company, for example AAPL or TSLA" }
+        },
+        "required": ["ticker"]
+      },
+      "output": { "example": { "ticker": "AAPL", "price": 231.44, "changePct": -0.62, "volume": 41230011 } }
+    },
+    {
+      "id": "crypto-price",
+      "method": "GET",
+      "path": "/crypto/price",
+      "price": "$0.01",
+      "description": "Spot price for a cryptocurrency in a chosen fiat currency, with the 24-hour change.",
+      "mimeType": "application/json",
+      "serviceName": "Walras Demo Markets",
+      "tags": ["crypto", "finance", "price", "market"],
+      "exampleInput": { "symbol": "XLM", "fiat": "USD" },
+      "inputSchema": {
+        "properties": {
+          "symbol": { "type": "string", "description": "Cryptocurrency ticker symbol, for example BTC, ETH, or XLM" },
+          "fiat": { "type": "string", "description": "Fiat currency for the quoted price as an ISO 4217 code, defaults to USD" }
+        },
+        "required": ["symbol"]
+      },
+      "output": { "example": { "symbol": "XLM", "fiat": "USD", "price": 0.4192, "change24hPct": 2.7 } }
+    },
+    {
+      "id": "geocode-forward",
+      "method": "GET",
+      "path": "/geo/forward",
+      "price": "$0.01",
+      "description": "Forward geocoding: turn a street address or place name into latitude and longitude coordinates.",
+      "mimeType": "application/json",
+      "serviceName": "Walras Demo Geo",
+      "tags": ["geocoding", "maps", "coordinates", "location"],
+      "exampleInput": { "address": "Bahnhofstrasse 1, Zurich" },
+      "inputSchema": {
+        "properties": {
+          "address": { "type": "string", "description": "Free-form postal address or place name to geocode" }
+        },
+        "required": ["address"]
+      },
+      "output": { "example": { "lat": 47.36667, "lon": 8.54, "confidence": 0.93 } }
+    },
+    {
+      "id": "geocode-reverse",
+      "method": "GET",
+      "path": "/geo/reverse",
+      "price": "$0.01",
+      "description": "Reverse geocoding: turn latitude and longitude coordinates back into the nearest street address.",
+      "mimeType": "application/json",
+      "serviceName": "Walras Demo Geo",
+      "tags": ["geocoding", "maps", "address", "location"],
+      "exampleInput": { "lat": "47.36667", "lon": "8.54" },
+      "inputSchema": {
+        "properties": {
+          "lat": { "type": "string", "description": "Latitude in decimal degrees, WGS84" },
+          "lon": { "type": "string", "description": "Longitude in decimal degrees, WGS84" }
+        },
+        "required": ["lat", "lon"]
+      },
+      "output": { "example": { "address": "Bahnhofstrasse 1, 8001 Zurich, Switzerland", "distanceM": 12 } }
+    },
+    {
+      "id": "ip-info",
+      "method": "GET",
+      "path": "/net/ip-info",
+      "price": "$0.01",
+      "description": "IP address intelligence: approximate geolocation, autonomous system number, ISP name, and VPN or proxy flags.",
+      "mimeType": "application/json",
+      "serviceName": "Walras Demo Net",
+      "tags": ["network", "ip", "geolocation", "security"],
+      "exampleInput": { "ip": "203.0.113.7" },
+      "inputSchema": {
+        "properties": {
+          "ip": { "type": "string", "description": "IPv4 or IPv6 address to look up" }
+        },
+        "required": ["ip"]
+      },
+      "output": { "example": { "ip": "203.0.113.7", "country": "CH", "city": "Zurich", "asn": 64511, "isp": "Example Carrier AG", "isVpn": false } }
+    },
+    {
+      "id": "sentiment",
+      "method": "POST",
+      "path": "/nlp/sentiment",
+      "price": "$0.01",
+      "description": "Sentiment analysis for a short text: positive, negative, or neutral label with a confidence score.",
+      "mimeType": "application/json",
+      "serviceName": "Walras Demo Language",
+      "tags": ["nlp", "sentiment", "text", "analysis"],
+      "bodyType": "json",
+      "exampleInput": { "text": "The settlement was fast and the fees were tiny." },
+      "inputSchema": {
+        "properties": {
+          "text": { "type": "string", "description": "Text to classify, up to two thousand characters; works best on a sentence or short paragraph" }
+        },
+        "required": ["text"]
+      },
+      "output": { "example": { "label": "positive", "confidence": 0.97 } }
+    },
+    {
+      "id": "translate",
+      "method": "POST",
+      "path": "/nlp/translate",
+      "price": "$0.01",
+      "description": "Machine translation of text between languages; detects the source language automatically.",
+      "mimeType": "application/json",
+      "serviceName": "Walras Demo Language",
+      "tags": ["nlp", "translation", "language", "text"],
+      "bodyType": "json",
+      "exampleInput": { "text": "Guten Morgen", "target": "en" },
+      "inputSchema": {
+        "properties": {
+          "text": { "type": "string", "description": "Text to translate" },
+          "target": { "type": "string", "description": "Target language as a BCP 47 code, for example de or ja" }
+        },
+        "required": ["text", "target"]
+      },
+      "output": { "example": { "detectedSource": "de", "target": "en", "translation": "Good morning" } }
+    }
+  ]
+}

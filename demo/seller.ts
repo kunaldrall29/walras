@@ -1,21 +1,26 @@
 /**
- * Minimal x402 seller — Session 2 acceptance case, seller half; Session 3 adds
- * the bazaar discovery declaration.
+ * Minimal x402 seller — Session 2 acceptance case, seller half; Session 3 added
+ * the bazaar discovery declaration; Session 4 makes the route table data-driven
+ * so the catalog gains enough varied listings for search to be non-trivial
+ * (gate G4.1).
  *
  * Everything protocol-shaped here is the stock SDK: `paymentMiddleware` from
  * `@x402/express`, `x402ResourceServer` + `HTTPFacilitatorClient` from `@x402/core`,
  * the server-side `ExactStellarScheme` from `@x402/stellar`, and
  * `declareDiscoveryExtension` from `@x402/extensions/bazaar` — the middleware
  * detects the declaration and auto-registers `bazaarResourceServerExtension`
- * itself. This file only chooses a route, a price, metadata, and which
+ * itself. This file only chooses routes, prices, metadata, and which
  * facilitator to trust — exactly the wiring a third-party seller would write
  * against the walras facilitator. There is no registration call anywhere:
  * cataloging happens because a payment settles (DECISIONS D-004).
  *
- * The price is "$0.01" so the settled transfer is 100000 base units of USDC —
- * deliberately identical to the x402.org settlement decoded in EVIDENCE S0-4, which
- * makes the on-chain diff against the baseline exact rather than approximate.
+ * The route table comes from eval/search/corpus.json — the same corpus the
+ * search evaluation harness measures against, so the live catalog and the eval
+ * fixture stay in lockstep. Every price is "$0.01" so each settled transfer is
+ * 100000 base units of USDC, identical to the x402.org settlement decoded in
+ * EVIDENCE S0-4.
  */
+import { readFileSync } from "node:fs";
 import express from "express";
 import { paymentMiddleware } from "@x402/express";
 import { HTTPFacilitatorClient, x402ResourceServer } from "@x402/core/server";
@@ -31,40 +36,70 @@ if (!PAY_TO) {
   process.exit(1);
 }
 
+interface CorpusResource {
+  id: string;
+  method: "GET" | "POST";
+  path: string;
+  price: string;
+  description: string;
+  mimeType: string;
+  serviceName: string;
+  tags: string[];
+  bodyType?: "json";
+  exampleInput: Record<string, unknown>;
+  inputSchema: Record<string, unknown>;
+  output: { example: Record<string, unknown> };
+}
+
+const corpus = JSON.parse(
+  readFileSync(new URL("../eval/search/corpus.json", import.meta.url), "utf8"),
+) as { resources: CorpusResource[] };
+
 const server = new x402ResourceServer([new HTTPFacilitatorClient({ url: FACILITATOR_URL })]);
 server.register("stellar:*", new ExactStellarScheme());
 
 const app = express();
 
-app.use(
-  paymentMiddleware(
+const routes = Object.fromEntries(
+  corpus.resources.map(entry => [
+    `${entry.method} ${entry.path}`,
     {
-      "GET /weather": {
-        accepts: {
-          payTo: PAY_TO,
-          scheme: "exact",
-          price: "$0.01",
-          network: "stellar:testnet",
-        },
-        description: "Live weather report for the walras demo city",
-        mimeType: "application/json",
-        serviceName: "Walras Demo Weather",
-        tags: ["weather", "demo"],
-        extensions: {
-          ...declareDiscoveryExtension({
-            output: { example: { report: "sunny", temperatureC: 31 } },
-          }),
-        },
+      accepts: {
+        payTo: PAY_TO,
+        scheme: "exact",
+        price: entry.price,
+        network: "stellar:testnet",
+      },
+      description: entry.description,
+      mimeType: entry.mimeType,
+      serviceName: entry.serviceName,
+      tags: entry.tags,
+      extensions: {
+        ...declareDiscoveryExtension({
+          method: entry.method,
+          input: entry.exampleInput,
+          inputSchema: entry.inputSchema,
+          ...(entry.bodyType !== undefined ? { bodyType: entry.bodyType } : {}),
+          output: entry.output,
+        } as Parameters<typeof declareDiscoveryExtension>[0]),
       },
     },
-    server,
-  ),
+  ]),
 );
 
-app.get("/weather", (_req, res) => {
-  res.json({ report: "sunny", temperatureC: 31 });
-});
+app.use(paymentMiddleware(routes, server));
+
+for (const entry of corpus.resources) {
+  const handler = (_req: express.Request, res: express.Response): void => {
+    res.json(entry.output.example);
+  };
+  if (entry.method === "GET") app.get(entry.path, handler);
+  else app.post(entry.path, handler);
+}
 
 app.listen(PORT, () => {
-  console.log(`seller listening on :${PORT}, payTo ${PAY_TO}, facilitator ${FACILITATOR_URL}`);
+  console.log(
+    `seller listening on :${PORT}, payTo ${PAY_TO}, facilitator ${FACILITATOR_URL}, ` +
+      `${corpus.resources.length} paid routes from corpus`,
+  );
 });

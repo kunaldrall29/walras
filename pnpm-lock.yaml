@@ -11,6 +11,12 @@ importers:
       '@stellar/stellar-sdk':
         specifier: ^16.2.0
         version: 16.2.0
+      '@walras/bazaar':
+        specifier: workspace:*
+        version: link:packages/bazaar
+      '@x402/extensions':
+        specifier: 2.20.0
+        version: 2.20.0(typescript@5.9.3)
 
   demo:
     dependencies:

@@ -1,6 +1,10 @@
-import type { DiscoveryResource, DiscoveryResourcesResponse } from "@x402/extensions/bazaar";
+import type {
+  DiscoveryResource,
+  DiscoveryResourcesResponse,
+  SearchDiscoveryResourcesResponse,
+} from "@x402/extensions/bazaar";
 import type { IndexOutcome } from "./indexer.js";
-import type { CatalogListing, ListPage } from "./store.js";
+import type { CatalogListing, ListPage, SearchPage } from "./store.js";
 
 /**
  * Wire-shape mapping: internal listings → the stock SDK's catalog types.
@@ -61,6 +65,33 @@ export function toListResponse(page: ListPage): DiscoveryResourcesResponse {
       limit: page.limit,
       offset: page.offset,
       total: page.total,
+    },
+  };
+}
+
+/**
+ * Builds the `GET /discovery/search` response body.
+ *
+ * Search responses use `resources` — never `items` (DECISIONS D-001) — plus
+ * an explicit `partialResults` and pagination as `{limit, cursor}`
+ * (FACTS F-027, F-028). Two literal spec readings matter here:
+ * `pagination.limit` is "Number of results in this page" — the count actually
+ * returned, not the requested maximum — and `pagination.cursor` is null on
+ * the final page. Both fields are emitted on every response; the spec makes
+ * them optional, but a client should never have to guess whether an absent
+ * flag means "complete" or "not implemented" (D-027).
+ *
+ * @param page - The page returned by the store's search.
+ * @returns The wire response body.
+ */
+export function toSearchResponse(page: SearchPage): SearchDiscoveryResourcesResponse {
+  return {
+    x402Version: X402_VERSION,
+    resources: page.resources.map(toDiscoveryResource),
+    partialResults: page.partialResults,
+    pagination: {
+      limit: page.resources.length,
+      cursor: page.nextCursor,
     },
   };
 }
