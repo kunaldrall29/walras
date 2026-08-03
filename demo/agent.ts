@@ -135,8 +135,9 @@ const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 const httpClient = new x402HTTPClient(client);
 
 // Two attempts: one visible retry absorbs a transient testnet-congestion miss
-// (a settle exceeding the stock middleware's timeout re-402s honestly — seen
-// live, EVIDENCE S5-5). A second failure is a demo failure.
+// (a settle can return success:false against a strained RPC with nothing
+// on-chain, and the stock middleware then re-402s honestly — seen live,
+// EVIDENCE S5-5). A second failure is a demo failure.
 let response!: Response;
 let body: unknown;
 let receipt: ReturnType<typeof httpClient.getPaymentSettleResponse> | null = null;

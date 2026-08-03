@@ -1698,10 +1698,21 @@ README instructs — `cp .env.example .env` + pasted setup-accounts fragment *in
 deliberately over-pasted `>>>` trailer*; `pnpm preflight` PASS, proving the parser-
 divergence and placeholder-shadowing fixes) ran into real testnet congestion: the
 `fx-rates` seed's `/settle` took **30.5 s** (versus 6–18 s for its neighbors in the same
-run), exceeding the stock middleware's facilitator-client timeout. walras reported the
-settle outcome, the stock seller re-issued 402, no funds moved for that attempt
-(buyer balance verified on Horizon: exactly 3 × 0.01 USDC left the account, not 4), and
-the demo **exited 1** rather than printing a false PASS. The seeder and agent then
+run) and returned `success: false` — the settle-time work against the visibly strained
+RPC (mandatory re-verification with fresh simulation, F-036/F-037, then submission)
+failed before anything reached the ledger. Forensics: Horizon with
+`include_failed=true` shows exactly **three** submitter transactions in the window, all
+successful — no failed or fee-charged fourth tx exists, ruling out an on-chain failure
+and placing the fault at settle-time simulation or `sendTransaction` (non-`PENDING` →
+`settle_exact_stellar_transaction_submission_failed`; a simulation fault would surface
+as `invalid_exact_stellar_payload_simulation_failed`, F-064). Neither the facilitator's
+request log nor the stock middleware records the failed settle's body, so the exact
+code went unobserved — a diagnosability gap, not a correctness one. The stock
+middleware has **no request timeout** (verified in `@x402/core`/`@x402/express` dist:
+no AbortSignal anywhere; its `!settleResult.success` branch is what re-402s the buyer),
+so the buyer saw a clean 402, no funds moved (buyer balance verified: exactly
+3 × 0.01 USDC left the account, not 4), and the demo **exited 1** rather than printing
+a false PASS. The seeder and agent then
 gained one *visible* retry per payment (both attempts printed; a second failure still
 fails the run), and the validation re-ran clean — see the closing run record below.
 

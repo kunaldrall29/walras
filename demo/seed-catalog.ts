@@ -78,11 +78,11 @@ for (const entry of resources) {
     };
   }
 
-  // Two attempts per resource: testnet inclusion can transiently exceed the
-  // stock middleware's facilitator-client timeout (observed live: a 30.5 s
-  // settle under congestion, EVIDENCE S5-5), and one visible retry keeps a
-  // single slow ledger from killing the whole demo. Both attempts are printed;
-  // a second failure still fails the run.
+  // Two attempts per resource: under testnet congestion a settle can fail
+  // transiently before anything reaches the ledger (observed live: a 30.5 s
+  // success:false settle against a strained RPC, EVIDENCE S5-5), and one
+  // visible retry keeps a single bad RPC window from killing the whole demo.
+  // Both attempts are printed; a second failure still fails the run.
   let settled = false;
   for (let attempt = 1; attempt <= 2 && !settled; attempt += 1) {
     try {
