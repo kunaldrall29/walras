@@ -1705,6 +1705,17 @@ the demo **exited 1** rather than printing a false PASS. The seeder and agent th
 gained one *visible* retry per payment (both attempts printed; a second failure still
 fails the run), and the validation re-ran clean — see the closing run record below.
 
+**Closing run — the state this pre-build ships in** (fresh clone of `9145156`, same
+documented `.env` flow, 2026-08-03): `pnpm preflight` PASS; `./scripts/demo.sh`
+**exit 0 in 66 s**, five settlements, no retries needed, refresh assertion green:
+
+```
+lastUpdated: 2026-08-03T17:54:28.197Z (at search time) -> 2026-08-03T17:55:12.876Z (bumped by this settlement — asserted)
+  tx   e3e52cb6654bab2c58bb189ba0b1d4665f897e9d6b3805b5bcf8c308c368d433
+  fee  22973 stroops
+DEMO: PASS — search -> pay -> hash -> auto-listed, all live on stellar:testnet
+```
+
 Independent Horizon re-verification of the S5-2/S5-3 headline transactions (fees and
 inclusion, queried out-of-band after the runs):
 
