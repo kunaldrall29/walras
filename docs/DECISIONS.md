@@ -372,6 +372,13 @@ S3's throughput demonstration (the knob shipped in S1 and is unit-tested; EVIDEN
 knowingly deferred it and what deferring it cost: 100 stroops per settlement, in the
 operator's favour.
 
+**S7 follow-up (2026-08-05):** captured. A fee account was created and funded, and the
+full demo ran through the fee-bump path — five settlements, exit 0 (EVIDENCE S7-1).
+Horizon shows `fee_account ≠ source_account`, `fee_charged` 23 073 / `max_fee` 33 253 —
+the predicted 100-stroop delta measured exactly, and byte-identical to the baseline
+operator's fee anatomy (F-054, F-055; F-086). The half of D-012 still not observed
+live is round-robin across multiple submitter seeds.
+
 ---
 
 ## D-022 — Manual registration endpoint: skipped for the pre-build.

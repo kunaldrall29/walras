@@ -22,3 +22,6 @@ npm-debug.log*
 pnpm-debug.log*
 coverage/
 .DS_Store
+
+dist-site/
+.vercel/

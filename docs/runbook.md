@@ -93,9 +93,10 @@ catalog as data worth backing up.
 - `FEE_BUMP_SECRET` names a dedicated fee account: each settlement is wrapped in
   a fee-bump transaction, decoupling fee payment from sequence-number
   management (F-047). The reference operator runs exactly this posture in
-  production (F-055). A live fee-bump settlement by walras itself is not yet
-  captured (EVIDENCE "Not yet captured") — running without it costs nothing in
-  correctness and saves 100 stroops per settlement (D-021).
+  production (F-055), and walras has run it live (EVIDENCE S7-1): fee 23 073
+  stroops per settlement, `fee_account ≠ source_account` on Horizon. Running
+  without it costs nothing in correctness and saves 100 stroops per settlement
+  (D-021) — the fee-bump buys sequence-number isolation, not safety.
 
 ## 5. Monitoring signals worth watching
 

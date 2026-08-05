@@ -204,9 +204,10 @@ ships it (D-012):
 - `FEE_BUMP_SECRET` wraps each settlement in a fee-bump transaction, decoupling fee
   payment from sequence-number management (F-047). The reference operator runs exactly
   this posture in production — its settlements show `source_account ≠ fee_account`
-  (F-055). S2 deliberately ran without it and measured the cost of that choice: 100
-  stroops per settlement, in the operator's favour (D-021). A live fee-bump settlement
-  by walras itself is **not yet captured** (EVIDENCE "Not yet captured").
+  (F-055). Captured live for walras itself (EVIDENCE S7-1): five settlements through
+  the fee-bump path, `fee_account ≠ source_account` verified on Horizon, fee 23 073
+  stroops — exactly the D-021 delta of 100 stroops over the single-submitter posture,
+  and byte-matching the baseline's fee anatomy (F-054).
 
 **PLANNED (RFP 3.5, grant scope):** a managed channel-account pool — pre-created
 submitter accounts sized to observed load, health-checked, rotated on sequence

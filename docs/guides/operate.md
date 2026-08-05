@@ -108,10 +108,11 @@ Throughput scale-out is configuration, not code changes (D-012):
 - `FEE_BUMP_SECRET` names a dedicated fee account: each settlement is wrapped
   in a fee-bump transaction, decoupling fee payment from sequence-number
   management (F-047). The reference operator runs exactly this posture in
-  production — its settlements show `source_account ≠ fee_account` (F-055).
-  Note honestly: a live fee-bump settlement by walras itself is not yet
-  captured (EVIDENCE "Not yet captured"); the knob is configuration plus a
-  funded fee account (D-021).
+  production — its settlements show `source_account ≠ fee_account` (F-055) —
+  and walras has run it live (EVIDENCE S7-1): the whole demo settled through
+  the fee-bump path at 23 073 stroops per settlement, exactly 100 stroops over
+  the plain posture (D-021). The knob is configuration plus a funded fee
+  account.
 
 ### 7. Know what you are sponsoring
 

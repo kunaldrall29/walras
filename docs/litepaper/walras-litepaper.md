@@ -378,10 +378,11 @@ independent walras instances.
   been exercised by walras.
 - **Baseline search.** Lexical BM25 with known, recorded failure modes on
   vocabulary-gap queries (EVIDENCE S4-3); no semantic retrieval yet.
-- **Single-submitter evidence.** All observed settlements ran one submitter without
-  fee-bump; the multi-signer and fee-bump knobs exist in configuration but a live
-  fee-bump settlement by walras is not yet captured (D-021, EVIDENCE "Not yet
-  captured").
+- **Single-submitter evidence.** The fee-bump posture is captured live — five
+  settlements with a decoupled fee account at exactly the predicted 100-stroop
+  premium (D-021, EVIDENCE S7-1) — but every observed run still used one submitter;
+  round-robin across multiple submitter seeds remains configuration-only, not yet
+  observed live.
 - **No `upto`.** Section 8 is design, not implementation (F-005).
 - **Open surface.** No caller authentication or rate limiting yet; the
   micro-settlement spam residual and URL squatting are disclosed in

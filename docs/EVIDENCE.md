@@ -1949,9 +1949,52 @@ the three guides resolve against the ledgers.
 
 ---
 
+## S7-1 — Fee-bump settlement captured live (2026-08-05)
+
+The last "Not yet captured" row, closed exactly as D-021 predicted: configuration plus
+a funded fee account, zero code changes.
+
+**Setup:** fee account `GDU7E6CRT2O27UEIWWXV5KO2VNUDSPSKVI5LV75H4WIH4RPQKOLPKGEM`
+created and Friendbot-funded, `FEE_BUMP_SECRET` added to `.env`.
+
+**Run:** `./scripts/demo.sh` → **exit 0**, five fresh settlements, all through the
+fee-bump path (run dir `demo-logs/run-20260805T192445Z-happy`); agent settlement
+`7519b950bbb62798fa0f76a50c38ce2ac82c4545ce06d4d9e62ac78c06699875`, demo-printed fee
+**23 073 stroops**; `DEMO: PASS`.
+
+**Horizon verification of the agent settlement (out-of-band):**
+
+```
+successful:                 true            ledger: 3987542
+source_account:             GATIEP…CWWI     (the walras submitter — inner tx source)
+fee_account:                GDU7E6…KGEM     (the new fee account — outer envelope)
+fee_charged:                23073           max_fee: 33253
+fee_bump_transaction.hash:  7519b950…9875   (the hash the receipt carried)
+inner_transaction.hash:     29430c45…eb02
+DECOUPLED (fee_account != source_account): true
+```
+
+Three cross-checks land to the stroop:
+
+- **The D-021 delta, confirmed:** 23 073 − 22 973 = exactly **100 stroops** — the
+  fee-bump operation's own base fee, measured rather than predicted now.
+- **The F-054 baseline anatomy, byte-matched:** the x402.org facilitator's dominant
+  settlement cluster is fee 23 073 / max_fee 33 253 with a decoupled fee account
+  (F-054, F-055). The walras fee-bump settlement reproduces both numbers exactly.
+- **The receipt convention:** the settle receipt's `transaction` is the fee-bump
+  envelope hash (Horizon resolves it and exposes the inner hash alongside), so
+  receipt-to-ledger verification keeps working unchanged under the fee-bump posture.
+
+D-012's posture is now demonstrated, not just configured. Remaining nuance, stated:
+this run used **one** submitter plus the fee account; round-robin across multiple
+submitter seeds is configuration shipped and unit-tested but still not observed in a
+live multi-submitter run.
+
+---
+
 ## Not yet captured
 
 | Section | Blocked on |
 |---|---|
-| **Fee-bump settlement by walras** | Config only (`FEE_BUMP_SECRET` + a funded fee account); knob shipped and unit-tested in S1. See D-021. |
+| ~~**Fee-bump settlement by walras**~~ | **CAPTURED in S7-1** (2026-08-05): five settlements through the fee-bump path, agent tx `7519b950…9875` verified on Horizon — `fee_account ≠ source_account`, fee 23 073 = baseline anatomy (F-054) and the D-021 delta exactly. |
 | ~~**MCP tool cataloged from a live MCP seller**~~ | **CAPTURED in S6-3** (2026-08-05): `demo/mcp-seller.ts` settled through walras and was auto-cataloged under the (url, toolName) tuple, then re-discovered and re-paid by id in the same MCP session. |
