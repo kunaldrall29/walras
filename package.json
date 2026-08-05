@@ -20,7 +20,8 @@
     "dev:facilitator": "pnpm --filter @walras/facilitator dev",
     "eval:search": "pnpm --filter @walras/bazaar build && node eval/search/run.mjs",
     "docs:gen": "node scripts/docs/gen.mjs",
-    "docs:check": "node scripts/docs/check.mjs"
+    "docs:check": "node scripts/docs/check.mjs",
+    "docs:site": "node scripts/docs/build-site.mjs"
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "^11.16.0",
