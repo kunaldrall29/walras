@@ -17,6 +17,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -53,7 +54,6 @@ const PAGES = new Map([
   ["docs/FACTS.md", "/facts.html"],
   ["docs/DECISIONS.md", "/decisions.html"],
   ["docs/EVIDENCE.md", "/evidence.html"],
-  ["docs/rfp.md", "/rfp.html"],
   ["docs/scf/stack-explanation.md", "/scf/stack-explanation.html"],
   ["docs/scf/decentralization.md", "/scf/decentralization.html"],
   ["docs/scf/infrastructure.md", "/scf/infrastructure.html"],
@@ -102,8 +102,7 @@ const NAV = [
   ["Ledgers", [
     ["/facts.html", "FACTS"],
     ["/decisions.html", "DECISIONS"],
-    ["/evidence.html", "EVIDENCE"],
-    ["/rfp.html", "RFP (verbatim)"],
+    ["/evidence.html", "Evidence"],
   ]],
   ["Project", [
     ["/security.html", "Security policy"],
@@ -160,9 +159,63 @@ function rewriteHref(href, sourceRel) {
 
 const md = new MarkdownIt({ html: true, linkify: false });
 
+/**
+ * Evidence-section anchor map: "S5-5" → the heading slug on /evidence.html.
+ * Built from EVIDENCE.md's own headings so links cannot dangle.
+ */
+const EVIDENCE_ANCHORS = new Map();
+for (const line of readFileSync(join(REPO_ROOT, "docs/EVIDENCE.md"), "utf8").split("\n")) {
+  const match = line.match(/^#{2,3}\s+(S\d+-\d+)\b(.*)$/);
+  if (match) EVIDENCE_ANCHORS.set(match[1], slug(`${match[1]}${match[2]}`));
+}
+
+const SREF = /\bEVIDENCE\s+(S\d+-\d+)\b/g;
+
+/**
+ * Site-presentation transform for one inline text token (never headings, never
+ * code spans): "EVIDENCE S5-5" becomes a bare "S5-5" linked to the evidence
+ * page's section, and any remaining standalone "EVIDENCE" is de-shouted to
+ * "evidence". The repository markdown keeps its markers untouched — they are
+ * what the claims-audit gate (docs:check rule R2) enforces; this rewrite is
+ * rendering only.
+ *
+ * @param token - A "text" token.
+ * @returns Replacement token list.
+ */
+function transformEvidenceText(token) {
+  const Token = token.constructor;
+  const out = [];
+  let last = 0;
+  for (const match of token.content.matchAll(SREF)) {
+    const before = token.content.slice(last, match.index);
+    if (before) out.push(Object.assign(new Token("text", "", 0), { content: before }));
+    const ref = match[1];
+    const anchor = EVIDENCE_ANCHORS.get(ref);
+    const open = new Token("link_open", "a", 1);
+    open.attrSet("href", `/evidence.html${anchor ? `#${anchor}` : ""}`);
+    out.push(open, Object.assign(new Token("text", "", 0), { content: ref }));
+    out.push(new Token("link_close", "a", -1));
+    last = match.index + match[0].length;
+  }
+  const tail = token.content.slice(last);
+  if (tail) out.push(Object.assign(new Token("text", "", 0), { content: tail }));
+  for (const piece of out) {
+    if (piece.type === "text") piece.content = piece.content.replace(/\bEVIDENCE\b/g, "evidence");
+  }
+  return out.length > 0 ? out : [token];
+}
+
 // Wide tables (FACTS, the error registry) must scroll inside their own box.
 md.renderer.rules.table_open = () => '<div class="table-wrap"><table>';
 md.renderer.rules.table_close = () => "</table></div>";
+
+// Diagrams scale down on small screens; wrapping each image in a link to its
+// own SVG gives phones a tap-to-open, pinch-to-zoom full view with no JS.
+const renderImage = md.renderer.rules.image.bind(md.renderer.rules);
+md.renderer.rules.image = (tokens, idx, options, env, self) => {
+  const src = tokens[idx].attrGet("src") ?? "";
+  return `<a class="figure" href="${src}">${renderImage(tokens, idx, options, env, self)}</a>`;
+};
 
 /**
  * Renders one markdown source to a full HTML page.
@@ -200,6 +253,13 @@ function renderPage(sourceRel, route) {
         if (src) child.attrSet("src", rewriteHref(src, sourceRel));
       }
     }
+    // Headings keep their document names (the evidence ledger's own title and
+    // section ids must survive); body text gets the evidence-word cleanup.
+    if (tokens[i - 1]?.type !== "heading_open") {
+      token.children = (token.children ?? []).flatMap(child =>
+        child.type === "text" ? transformEvidenceText(child) : [child],
+      );
+    }
   }
 
   const body = md.renderer.render(tokens, md.options, env);
@@ -218,49 +278,89 @@ function renderPage(sourceRel, route) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f8fafb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151c23" media="(prefers-color-scheme: dark)">
 <title>${title} — walras docs</title>
 <style>
 :root{--bg:#ffffff;--fg:#1c2733;--muted:#5b6b7b;--line:#e3e8ee;--accent:#0f62fe;--code-bg:#f4f6f8;--side:#f8fafb}
 @media (prefers-color-scheme:dark){:root{--bg:#11161c;--fg:#dbe4ec;--muted:#8b9aa9;--line:#2a3440;--accent:#6ea8ff;--code-bg:#1a222b;--side:#151c23}}
 *{box-sizing:border-box}
-body{margin:0;font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg);display:flex;min-height:100vh}
-nav{width:230px;flex:none;border-right:1px solid var(--line);background:var(--side);padding:1.2rem .9rem;position:sticky;top:0;height:100vh;overflow-y:auto}
-nav .brand{font-weight:700;font-size:1.05rem;margin-bottom:1rem;display:block;color:var(--fg);text-decoration:none}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg)}
+.layout{display:flex;min-height:100vh}
+.sidebar{width:230px;flex:none;border-right:1px solid var(--line);background:var(--side);padding:1.2rem .9rem;position:sticky;top:0;height:100vh;overflow-y:auto}
+.brand{font-weight:700;font-size:1.05rem;color:var(--fg);text-decoration:none}
+.sidebar .brand{margin-bottom:1rem;display:block}
 .nav-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:1rem 0 .3rem}
-nav a{display:block;padding:.18rem .5rem;border-radius:6px;color:var(--fg);text-decoration:none;font-size:.92rem}
-nav a:hover{background:var(--line)}
-nav a.active{color:var(--accent);font-weight:600}
+.nav-group a{display:block;padding:.28rem .5rem;border-radius:6px;color:var(--fg);text-decoration:none;font-size:.92rem}
+.nav-group a:hover{background:var(--line)}
+.nav-group a.active{color:var(--accent);font-weight:600}
+.topbar{display:none}
 main{flex:1;min-width:0;padding:2.2rem clamp(1rem,4vw,3.2rem);max-width:56rem}
-h1,h2,h3,h4{line-height:1.3;scroll-margin-top:1rem}
+h1,h2,h3,h4{line-height:1.3;scroll-margin-top:4.2rem;overflow-wrap:break-word}
 h1{font-size:1.7rem;border-bottom:1px solid var(--line);padding-bottom:.4rem}
 h2{font-size:1.32rem;margin-top:2.2rem;border-bottom:1px solid var(--line);padding-bottom:.3rem}
 a{color:var(--accent)}
-code{font:.86em ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code-bg);padding:.1em .35em;border-radius:4px}
+p,li{overflow-wrap:break-word}
+code{font:.86em ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code-bg);padding:.1em .35em;border-radius:4px;overflow-wrap:anywhere}
 pre{background:var(--code-bg);padding:.9rem 1rem;border-radius:8px;overflow-x:auto;line-height:1.5}
-pre code{background:none;padding:0}
-.table-wrap{overflow-x:auto;margin:1rem 0}
+pre code{background:none;padding:0;overflow-wrap:normal}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:1rem 0;max-width:100%}
 table{border-collapse:collapse;font-size:.9rem;min-width:100%}
-th,td{border:1px solid var(--line);padding:.42rem .6rem;text-align:left;vertical-align:top}
+th,td{border:1px solid var(--line);padding:.42rem .6rem;text-align:left;vertical-align:top;overflow-wrap:anywhere;min-width:6rem}
 th{background:var(--code-bg)}
+a.figure{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
 img{max-width:100%;height:auto;background:#fff;border:1px solid var(--line);border-radius:8px}
 blockquote{margin:1rem 0;padding:.2rem 1rem;border-left:3px solid var(--line);color:var(--muted)}
 footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);font-size:.82rem;color:var(--muted)}
-@media (max-width:820px){body{flex-direction:column}nav{width:100%;height:auto;position:static;display:flex;flex-wrap:wrap;gap:.1rem .8rem}nav .brand{width:100%}.nav-group{margin-right:.6rem}}
+@media (max-width:820px){
+  .sidebar{display:none}
+  .topbar{display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;background:var(--side);border-bottom:1px solid var(--line);padding:.55rem .9rem}
+  .menu{position:relative}
+  .menu>summary{list-style:none;cursor:pointer;padding:.45rem .9rem;border:1px solid var(--line);border-radius:8px;font-size:.92rem;user-select:none}
+  .menu>summary::-webkit-details-marker{display:none}
+  .menu[open]>summary{background:var(--line)}
+  .menu-panel{position:fixed;left:0;right:0;top:3.1rem;bottom:0;overflow-y:auto;background:var(--bg);border-top:1px solid var(--line);padding:.6rem 1rem 2rem;z-index:9}
+  .menu-panel .nav-group a{padding:.55rem .5rem;font-size:1rem;border-bottom:1px solid var(--line);border-radius:0}
+  main{padding:1.2rem 1rem 2rem}
+  h1{font-size:1.42rem}
+  h2{font-size:1.18rem}
+  body{font-size:15px}
+  table{font-size:.84rem}
+  pre{font-size:.82rem}
+}
 </style>
 </head>
 <body>
-<nav><a class="brand" href="/index.html">walras</a>${nav}</nav>
+<header class="topbar">
+  <a class="brand" href="/index.html">walras</a>
+  <details class="menu">
+    <summary>Menu</summary>
+    <div class="menu-panel">${nav}</div>
+  </details>
+</header>
+<div class="layout">
+<nav class="sidebar"><a class="brand" href="/index.html">walras</a>${nav}</nav>
 <main>
 ${body}
 <footer>Generated from <a href="${GITHUB}/tree/${BRANCH}">${BRANCH}</a> @ <code>${COMMIT}</code> · Apache-2.0 · testnet, unaudited — see the <a href="/threat-model.html">threat model</a>.</footer>
 </main>
+</div>
 </body>
 </html>
 `;
 }
 
-rmSync(OUT, { recursive: true, force: true });
-mkdirSync(OUT, { recursive: true });
+// Clear previous output but keep the Vercel project link — wiping .vercel made
+// a bare `vercel deploy` silently create a fresh project instead of walras-docs.
+if (existsSync(OUT)) {
+  for (const entry of readdirSync(OUT)) {
+    if (entry === ".vercel" || entry === ".env.local") continue;
+    rmSync(join(OUT, entry), { recursive: true, force: true });
+  }
+} else {
+  mkdirSync(OUT, { recursive: true });
+}
 
 for (const [dir, sitePath] of ASSET_DIRS) {
   cpSync(join(REPO_ROOT, dir), join(OUT, sitePath.slice(1)), { recursive: true });

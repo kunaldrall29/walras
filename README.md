@@ -9,7 +9,7 @@ Apache-2.0. Built against the pinned spec commit
 
 ---
 
-## Status — everything below is proven live on `stellar:testnet` (EVIDENCE linked per row)
+## Status — everything below ran live on `stellar:testnet`, evidence linked per row
 
 | Component | State |
 | --- | --- |
