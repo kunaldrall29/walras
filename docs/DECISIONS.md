@@ -559,3 +559,32 @@ never be. The cap (default 10 000 000 base units = 1 USDC, F-008) binds at two l
 Only `CLIENT_STELLAR_PRIVATE_KEY` enables payment at all; without it the server runs
 search-only and paid_call names the gap (`walras_mcp_wallet_not_configured`) — after
 the probe, so free resources still work walletless.
+
+---
+
+## D-031 — G-LIC becomes two-tier: zero tolerance on the shipped path; reviewed, printed exceptions for docs-build tooling.
+**Status:** ADOPTED · 2026-08-05 · Evidence: F-084, F-060; EVIDENCE §Docs
+
+Installing the docs toolchain (`@mermaid-js/mermaid-cli`, MIT — pre-checked per gate
+GD.3, F-084) pulled three transitive findings the original whole-tree gate hard-fails
+on: `elkjs@0.9.3` (EPL-2.0), `dompurify@3.4.13` (MPL-2.0 OR Apache-2.0), and
+`khroma@2.1.0` (no license field in its manifest; the package ships an MIT license
+file). All three are reachable only through `@mermaid-js/mermaid-cli`, a
+devDependency that executes at docs build time — `pnpm ls -r --prod --depth=Infinity`
+confirms none is in any workspace project's production dependency closure.
+
+RFP 3.6's constraint is about the deliverable: "Every dependency must be compatible
+with permissive redistribution and with operating the code as a network service."
+A diagram renderer that never ships and never serves is not in that path — but
+loosening the gate silently would be exactly the imprecision this project screens for.
+
+**Decision:** `scripts/license-scan.mjs` now scans in two tiers. (1) The shipped
+dependency path — prod deps, transitive, of every workspace project — keeps zero
+tolerance: strong copyleft, weak copyleft, and undeclared all fail. (2) Dev-toolchain
+findings: strong/network copyleft still fails outright; weak-copyleft or undeclared
+entries must match a pinned `name@version` exception carrying a written rationale that
+is printed on every run, and khroma's MIT license file is re-verified on disk each run.
+A version bump of an excepted package re-triggers review because entries pin exact
+versions. Alternatives rejected: dropping rendered SVGs (R6 requires committed,
+regenerable diagrams) and switching renderers (every maintained mermaid renderer
+carries the same transitive tree).

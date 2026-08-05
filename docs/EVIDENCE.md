@@ -1671,7 +1671,7 @@ raw logs land in `demo-logs/run-<stamp>-happy/` if a retake needs stitching.
 ## S5-5 — README quickstart, timed from scratch (2026-08-03)
 
 Measured on this codespace (4-core dev container, warm npm registry + pnpm store cache),
-following the README top to bottom against commit `fed532b`:
+following the README top to bottom against commit `27337f0`:
 
 | step | command | measured |
 |---|---|---|
@@ -1693,7 +1693,7 @@ seeds `b305f5b4…28eb`, `58f8284e…701d`, `1a4c0830…6ece`, `f2bf42b8…050a`
 (`DEMO: PASS — search -> pay -> hash -> auto-listed`).
 
 **Final-state validation caught a live congestion event — and the demo failed honestly.**
-The post-hardening fresh-clone validation (commit `ccb982c`; `.env` built exactly as the
+The post-hardening fresh-clone validation (commit `c201e6b`; `.env` built exactly as the
 README instructs — `cp .env.example .env` + pasted setup-accounts fragment *including a
 deliberately over-pasted `>>>` trailer*; `pnpm preflight` PASS, proving the parser-
 divergence and placeholder-shadowing fixes) ran into real testnet congestion: the
@@ -1716,7 +1716,7 @@ a false PASS. The seeder and agent then
 gained one *visible* retry per payment (both attempts printed; a second failure still
 fails the run), and the validation re-ran clean — see the closing run record below.
 
-**Closing run — the state this pre-build ships in** (fresh clone of `9145156`, same
+**Closing run — the state this pre-build ships in** (fresh clone of `229e3cc`, same
 documented `.env` flow, 2026-08-03): `pnpm preflight` PASS; `./scripts/demo.sh`
 **exit 0 in 66 s**, five settlements, no retries needed, refresh assertion green:
 
@@ -1745,7 +1745,7 @@ fee, and the buyer never paid one (F-006).
 ## S6-1 — Session 6 pre-flight gate G6.1 (2026-08-05)
 
 **Session 5 done:** FACTS update log rows through 2026-08-03 + EVIDENCE S5-1 … S5-5
-present; `git log` shows the S5 hardening commits (`fed532b` … `6ee7ac7`).
+present; `git log` shows the S5 hardening commits (`27337f0` … `6101730`).
 
 **`@x402/mcp` license + surface, verified four independent ways:**
 
@@ -1845,6 +1845,107 @@ extension happened inside the stock `@x402/mcp`/`@x402/core` payment path (F-032
 client behavior), walras extracted and keyed it as `(resource.url, toolName)`, and the
 next search served it to the same agent that had caused the listing. Discover→pay ran
 in both directions across both resource types with no registration call anywhere.
+
+---
+
+## Docs — documentation suite session (2026-08-05)
+
+### Gates
+
+- **GD.1** — FACTS P0 rows all CLOSED (Q-009 PARTIAL is P1); pinned spec SHA present in
+  the header. PASS.
+- **GD.2** — S1–S3 evidence present; S5 evidence (demo S5-2/S5-3, e2e S2-4, timing
+  S5-5) present. PASS.
+- **GD.3** — docs tooling license check run on registry metadata **before install**:
+  `@mermaid-js/mermaid-cli@11.16.0` MIT, `@redocly/cli@2.44.2` MIT,
+  `markdown-link-check@3.15.0` ISC, `yaml@2.9.0` ISC (F-084). Post-install full-tree
+  scan surfaced three dev-only transitive findings (`elkjs` EPL-2.0, `dompurify`
+  MPL-2.0-OR-Apache-2.0, `khroma` license-field-less but MIT on disk), none in any
+  workspace project's production closure (`pnpm ls -r --prod`: 55 shipped packages,
+  zero mermaid-family). G-LIC rewritten two-tier (D-031); re-run:
+  `GATE G-LIC: PASS — shipped path clean; dev-toolchain findings all carry reviewed exceptions`.
+- **GD.4** — docs tree created to the target layout (api/, reference/, diagrams/,
+  guides/, litepaper/, scf/; scripts/docs/). PASS.
+
+### Single-sourcing refactor (writing rule R3 stop-condition, fixed in code first)
+
+The Fastify routes carried no schemas and the config was hand-rolled — both R3
+generators would have required hand-writing. Fixed in code before generating:
+
+- `packages/facilitator/src/routeSchemas.ts` — route JSON Schemas + OpenAPI metadata,
+  attached to every Fastify route; no-op validator/serializer compilers keep wire
+  behavior identical (no Ajv coercion, no fast-json-stringify field dropping).
+- `CONFIG_REFERENCE` tables exported beside both `loadConfig`s (facilitator,
+  mcp-server); defaults reference the loader's own constants.
+- `SCHEMA_SQL` exported from `packages/bazaar/src/store.ts` for ERD introspection.
+- Drift-guard tests added: facilitator `config-reference.test.ts` (+ ROUTES↔
+  `walras_unknown_route` lockstep), mcp-server `config-reference.test.ts`.
+
+Workspace suite after the refactor: **213/213** (bazaar 64, facilitator 99,
+mcp-server 50); `check:deps PASS — exactly one @stellar/stellar-sdk in the tree (16.2.0)`.
+
+### Generators and the docs gate
+
+`pnpm docs:gen` (scripts/docs/) produced, from code:
+
+```
+gen-openapi: wrote docs/api/openapi.yaml (6 routes)          # redocly lint: valid, 0 errors
+gen-config:  wrote docs/reference/config.md (8 facilitator vars, 4 mcp-server vars)
+gen-errors:  wrote docs/reference/errors.md (64 codes across 4 taxonomies)
+gen-erd:     wrote docs/diagrams/catalog-erd.mmd (4 tables)
+render-diagrams: 9 SVGs current (8 docs/diagrams + docs/scf/high-level-diagram), each
+                 carrying a source-hash marker; a stale SVG fails docs:check
+```
+
+`pnpm docs:check` final run (drift regeneration + redocly lint + stale-SVG hash check
++ markdown-link-check incl. external links + claims audit — banned words, R2
+evidence-per-capability-claim, roadmap-date ban, R1 citation floor):
+
+```
+docs:check — PASS (drift, openapi, diagrams, links, claims) across 27 markdown files
+```
+
+CI: `.github/workflows/ci.yml` added — test job (check:deps, G-LIC, build, typecheck,
+tests) and docs job (docs:gen, `git diff --exit-code`, docs:check).
+
+### Documents written this session
+
+Phase D1: `ARCHITECTURE.md` rewritten as-built (settlement walkthrough, indexing
+invariant, throughput posture with PLANNED channel-account pool, three deployment
+topologies with self-facilitation marked PLANNED, docs pipeline); `MODELS.md`;
+`THREAT-MODEL.md` (STRIDE-lite, both boundaries, every row naming its test or labeled
+residual; audit-scope statement per RFP 3.6); 7 hand-authored diagrams + generated ERD.
+
+Phase D2: `guides/sell.md`, `guides/buy-agent.md`, `guides/operate.md` (role-based,
+RFP shape: end-state, prerequisites incl. the F-085 trustline-reserve nuance, numbered
+steps, live-example links with settled tx hashes, troubleshooting tables keyed to the
+generated error registry); `quickstart.md` (timing cited from S5-5 — the measured
+fresh-clone walkthrough stands, ≈100 s machine time); `runbook.md`; `glossary.md`;
+`faq.md`; root `SECURITY.md` + `CONTRIBUTING.md`; `litepaper/walras-litepaper.md`
+(13-section design paper incl. the upto design-space analysis and an explicit
+LIMITATIONS section) + `litepaper/ABSTRACT.md`; `docs/scf/` — high-level diagram
+(.mmd + .svg) and six ≤200-word verbatim-pasteable snippets.
+
+### Post-refactor live validation
+
+Because the R3 refactor touched `server.ts` route registration, the one-command demo
+was re-run live after it: `./scripts/demo.sh` → **exit 0**, five fresh settlements on
+`stellar:testnet` (run dir `demo-logs/run-20260805T191206Z-happy`), agent settlement
+`b3fa66a247f0f65ff28df67661a680d74ca0148a75131e4594111c26fd67a054`, fee **22 973
+stroops** (= F-069 to the stroop), `EXTENSION-RESPONSES {"bazaar":{"status":"success"}}`,
+catalog refresh assertion green:
+
+```
+DEMO: PASS — search -> pay -> hash -> auto-listed, all live on stellar:testnet
+```
+
+### Claims-audit spot-check
+
+10 randomly sampled cited normative statements (seeded shuffle across MODELS,
+THREAT-MODEL, guides, litepaper) were traced to their FACTS rows by hand: 10/10 match
+the row's claim (F-004, F-006, F-024, F-032, F-038, F-062, F-078, F-082, F-083,
+F-085). The guides agent independently verified all 66 distinct F-/D- ids cited in
+the three guides resolve against the ledgers.
 
 ---
 

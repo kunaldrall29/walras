@@ -15,6 +15,7 @@
 
 export {
   BazaarStore,
+  SCHEMA_SQL,
   clampLimit,
   DEFAULT_LIST_LIMIT,
   MAX_LIST_LIMIT,

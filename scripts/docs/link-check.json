@@ -1,0 +1,13 @@
+{
+  "ignorePatterns": [
+    { "pattern": "^https?://(127\\.0\\.0\\.1|localhost)" },
+    { "pattern": "^https://faucet\\.circle\\.com" },
+    { "pattern": "^https://lab\\.stellar\\.org" },
+    { "pattern": "^mailto:" }
+  ],
+  "aliveStatusCodes": [200, 201, 204, 206, 301, 302, 307, 308, 403, 429],
+  "retryOn429": true,
+  "retryCount": 3,
+  "fallbackRetryDelay": "10s",
+  "timeout": "20s"
+}

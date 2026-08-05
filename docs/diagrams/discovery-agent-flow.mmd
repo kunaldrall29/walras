@@ -1,0 +1,21 @@
+%%{init: {'theme': 'neutral'}}%%
+%% The agent's discover→pay loop through the two MCP tools.
+%% Proven live end to end with a generic MCP client: EVIDENCE S6-3.
+flowchart TD
+  A["Agent in an MCP runtime<br/>(any MCP client)"] -- "search_resources(query, filters?)" --> M["walras mcp-server"]
+  M -- "GET /discovery/search?query=..." --> F["walras facilitator"]
+  F -- "BM25-ranked page (D-026)" --> M
+  M -- "ranked hits: deterministic id (D-029),<br/>price in base units, network,<br/>calling convention incl. input schema (F-082)" --> A
+
+  A -- "paid_call(resourceId | url + toolName, input?)" --> M
+  M --> R{"re-resolve the id against<br/>the live catalog (D-029)"}
+  R -- "unknown or stale" --> E1["isError result<br/>{errorCode: walras_mcp_unknown_resource_id}"]
+  R -- "listed" --> P["call the target — its live 402<br/>is the source of payment terms,<br/>never the catalog (D-024, D-029)"]
+  P --> C{"spend-cap policy (D-030):<br/>exact @ configured network,<br/>amount within WALRAS_MCP_MAX_AMOUNT?"}
+  C -- "over cap or foreign network" --> E2["isError result<br/>{errorCode: walras_mcp_payment_declined_by_policy}<br/>nothing was signed"]
+  C -- "within cap" --> Y["pay via the stock client path<br/>(@x402/fetch for http,<br/>@x402/mcp for MCP tools),<br/>settled through walras"]
+  Y --> Z["tool result: resource output +<br/>receipt {transaction, network, payer} (F-038)"]
+
+  E1 -.-> A
+  E2 -.-> A
+  Z -.-> A

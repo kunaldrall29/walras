@@ -247,6 +247,111 @@ export function loadConfig(env: Env = process.env): FacilitatorConfig {
   };
 }
 
+/** Documentation entry for one environment variable. */
+export interface ConfigVarDoc {
+  /** The environment variable name. */
+  readonly name: string;
+  /** Accepted alias names, if any. */
+  readonly aliases?: readonly string[];
+  /** Whether the variable is required — "yes", "no", or a condition. */
+  readonly required: string;
+  /** The default, rendered for display; null when there is none. */
+  readonly defaultValue: string | null;
+  /** What a valid value looks like. */
+  readonly format: string;
+  /** What the variable does. Plain sentences; may cite FACTS/DECISIONS ids. */
+  readonly description: string;
+}
+
+/**
+ * The facilitator's configuration surface, as data — the single source
+ * `pnpm docs:gen` generates `docs/reference/config.md` from (writing rule R3).
+ *
+ * Lives beside `loadConfig` so the two cannot drift silently: defaults reference
+ * the same constants the loader uses, and `test/config-reference.test.ts` fails
+ * if `loadConfig` reads a variable this table does not document (or vice versa).
+ */
+export const CONFIG_REFERENCE: readonly ConfigVarDoc[] = [
+  {
+    name: "NETWORK",
+    required: "no",
+    defaultValue: STELLAR_TESTNET_CAIP2,
+    format: `one of: ${SUPPORTED_NETWORKS.join(", ")}`,
+    description:
+      "CAIP-2 identifier of the Stellar network this facilitator serves (FACTS F-004). " +
+      "One facilitator process serves exactly one network.",
+  },
+  {
+    name: "RPC_URL",
+    required: `on ${STELLAR_PUBNET_CAIP2}`,
+    defaultValue: `${DEFAULT_RPC_URL} (testnet only)`,
+    format: "http(s) URL",
+    description:
+      "Soroban RPC endpoint used for simulation, submission, and ledger reads. " +
+      "Pubnet has no public default RPC, so the variable is required there (FACTS F-004).",
+  },
+  {
+    name: "SUBMITTER_SECRET",
+    aliases: ["FACILITATOR_STELLAR_PRIVATE_KEY"],
+    required: "yes",
+    defaultValue: null,
+    format: "one 'S...' Ed25519 secret seed, or a comma-separated list",
+    description:
+      "The account(s) that source settlement transactions and sponsor their network " +
+      "fees. Multiple seeds enable the package's round-robin signer selection " +
+      "(DECISIONS D-012). The alias exists so an environment prepared for the x402 " +
+      "e2e suite works unchanged (FACTS F-056).",
+  },
+  {
+    name: "FEE_BUMP_SECRET",
+    required: "no",
+    defaultValue: null,
+    format: "'S...' Ed25519 secret seed",
+    description:
+      "Dedicated fee account. When set, each settlement is wrapped in a fee-bump " +
+      "transaction, decoupling fee payment from sequence-number management — the " +
+      "posture the reference operator runs in production (FACTS F-047, F-055; " +
+      "DECISIONS D-012).",
+  },
+  {
+    name: "PORT",
+    required: "no",
+    defaultValue: String(DEFAULT_PORT),
+    format: "integer in [1, 65535]",
+    description: "TCP port the HTTP server listens on.",
+  },
+  {
+    name: "FEE_MODE",
+    required: "no",
+    defaultValue: FEE_MODES[0],
+    format: `one of: ${FEE_MODES.join(", ")}`,
+    description:
+      "Service-fee posture. 'free' — no walras fee on top of the sponsored network " +
+      "fee — is the only implemented mode; any other value is a startup error rather " +
+      "than a silent fallback. Distinct from extra.areFeesSponsored, which is about " +
+      "network fees and is always true (FACTS F-006).",
+  },
+  {
+    name: "DB_PATH",
+    required: "no",
+    defaultValue: DEFAULT_DB_PATH,
+    format: "filesystem path, or ':memory:'",
+    description:
+      "SQLite file backing the discovery catalog (WAL journal mode; DECISIONS D-023). " +
+      "The store creates the file on first open.",
+  },
+  {
+    name: "MAX_TRANSACTION_FEE_STROOPS",
+    required: "no",
+    defaultValue: String(DEFAULT_MAX_TRANSACTION_FEE_STROOPS),
+    format: "positive integer (stroops)",
+    description:
+      "Settlement-fee safety ceiling passed to the payment scheme (FACTS F-037). " +
+      "Measured settlements run at ~23 000 stroops (FACTS F-069), so the default " +
+      "leaves roughly 2x headroom.",
+  },
+];
+
 /**
  * Renders a configuration for logging, with every secret removed.
  *

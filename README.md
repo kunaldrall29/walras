@@ -9,7 +9,7 @@ Apache-2.0. Built against the pinned spec commit
 
 ---
 
-## Status — everything below is proven live on `stellar:testnet`
+## Status — everything below is proven live on `stellar:testnet` (EVIDENCE linked per row)
 
 | Component | State |
 | --- | --- |
@@ -36,7 +36,7 @@ Every duration below was measured in a timed fresh-clone walkthrough (EVIDENCE S
 "docs to a paid, discoverable endpoint" path lands around 5–8 minutes, far inside the
 hour bar.
 
-**1. Clone and install** (measured: 5 s on a warm pnpm store; expect a couple of
+**1. Clone and install** (measured: 5 s on a warm pnpm store, S5-5; expect a couple of
 minutes cold)
 
 ```bash
@@ -44,7 +44,7 @@ git clone <this-repo> && cd walras
 pnpm install
 ```
 
-**2. Create and fund testnet accounts** (measured: 25 s automated + one manual faucet
+**2. Create and fund testnet accounts** (measured: 25 s automated, S5-5, + one manual faucet
 visit, ~2–5 min)
 
 ```bash
@@ -58,13 +58,13 @@ fragment. Paste it into `.env`. One step cannot be automated: fund the **buyer**
 the script prints with testnet USDC at [faucet.circle.com](https://faucet.circle.com)
 (select Stellar — captcha-gated, so it needs a human).
 
-**3. Preflight** (measured: 3 s)
+**3. Preflight** (measured: 3 s, S5-5)
 
 ```bash
 pnpm preflight     # submitter funded? RPC reachable?
 ```
 
-**4. The demo** (measured: 65 s including the first build — five real settlements on
+**4. The demo** (measured: 65 s incl. the first build, S5-5 — five real settlements on
 stellar:testnet)
 
 ```bash
@@ -188,10 +188,24 @@ walras to the x402 repo's own e2e harness.
 
 ## Documentation
 
+Start here by role: [sell](./docs/guides/sell.md) · [buy / build an agent](./docs/guides/buy-agent.md) ·
+[operate a facilitator](./docs/guides/operate.md) — or the [quickstart](./docs/quickstart.md).
+
 | File | Contents |
 | --- | --- |
 | [`docs/FACTS.md`](./docs/FACTS.md) | Every protocol, library, and API claim, with source and date. Nothing is asserted anywhere in this repo without a VERIFIED row here |
 | [`docs/DECISIONS.md`](./docs/DECISIONS.md) | Each point where the spec, the SDK, the reference operator, or the RFP disagree, and what walras does about it |
 | [`docs/EVIDENCE.md`](./docs/EVIDENCE.md) | Captured transcripts and measurements. Every "works" claim points here |
-| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Repository layout, request path, error model, testing strategy |
+| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | As-built architecture: components, settlement path, indexing invariant, topologies, docs pipeline |
+| [`docs/MODELS.md`](./docs/MODELS.md) | Domain and data models, payment lifecycle, catalog ERD |
+| [`docs/THREAT-MODEL.md`](./docs/THREAT-MODEL.md) | STRIDE-lite over the payment and discovery trust boundaries, with the test behind each control |
+| [`docs/api/openapi.yaml`](./docs/api/openapi.yaml) | **Generated** from the Fastify route schemas — `pnpm docs:gen` |
+| [`docs/reference/config.md`](./docs/reference/config.md) | **Generated** configuration reference (facilitator + MCP server) |
+| [`docs/reference/errors.md`](./docs/reference/errors.md) | **Generated** error-code registry (all four taxonomies) |
+| [`docs/runbook.md`](./docs/runbook.md) | Operator runbook: backup, keys, monitoring, degraded modes |
+| [`docs/glossary.md`](./docs/glossary.md) · [`docs/faq.md`](./docs/faq.md) | Terms with citations; the questions the guides can't answer inline |
+| [`docs/litepaper/walras-litepaper.md`](./docs/litepaper/walras-litepaper.md) | The design paper ([one-page abstract](./docs/litepaper/ABSTRACT.md)) |
 | [`docs/rfp.md`](./docs/rfp.md) | The SCF RFP this project answers, verbatim |
+
+`pnpm docs:gen` regenerates everything marked generated plus the diagram SVGs;
+`pnpm docs:check` is the CI gate (drift, OpenAPI lint, stale SVGs, links, claims audit).

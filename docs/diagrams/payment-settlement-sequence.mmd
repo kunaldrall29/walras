@@ -1,0 +1,31 @@
+%%{init: {'theme': 'neutral'}}%%
+%% The settlement path as observed on the live wire (EVIDENCE S2-2).
+%% Headers are the v2 canonical names (FACTS F-065). Settle re-verifies
+%% independently by spec mandate (FACTS F-036).
+sequenceDiagram
+  autonumber
+  participant B as Buyer<br/>(stock @x402/fetch)
+  participant S as Seller<br/>(stock @x402/express)
+  participant W as walras facilitator
+  participant X as ExactStellarScheme<br/>(@x402/stellar)
+  participant N as Stellar network<br/>(Soroban RPC)
+
+  B->>S: GET /resource (no payment)
+  S-->>B: 402 + PAYMENT-REQUIRED header (terms, F-065)
+  Note over B: wallet signs a Soroban auth entry<br/>authorizing transfer(from, to, amount),<br/>ledger-bounded expiry (F-034)
+  B->>S: GET /resource + PAYMENT-SIGNATURE header
+  S->>W: POST /verify {paymentPayload, paymentRequirements}
+  W->>X: verify()
+  X->>N: simulateTransaction
+  N-->>X: transfer events, auth-entry status
+  X-->>W: isValid true (or a named reason code)
+  W-->>S: 200 VerifyResponse
+  Note over S: middleware runs the resource handler
+  S->>W: POST /settle (same envelope)
+  Note over X: full independent re-verification first —<br/>spec mandate, done inside settle() (F-036)
+  W->>X: settle()
+  X->>N: rebuild with submitter as source,<br/>sign, submit, poll
+  N-->>X: transaction SUCCESS + hash
+  X-->>W: {success, transaction, network, payer} (F-038)
+  W-->>S: 200 SettleResponse (+ EXTENSION-RESPONSES, F-024)
+  S-->>B: 200 resource body + PAYMENT-RESPONSE receipt (F-065)

@@ -1,0 +1,41 @@
+%%{init: {'theme': 'neutral'}}%%
+%% Payment lifecycle through the facilitator. Every terminal state carries a
+%% non-null machine-readable reason (RFP 3.6; DECISIONS D-007, D-014, D-025).
+%% Indexing outcomes never change the settlement outcome (DECISIONS D-015).
+stateDiagram-v2
+  [*] --> Received
+
+  Received --> Rejected: envelope or kind uninterpretable — walras_* code
+  Received --> Verifying: envelope valid, kind served
+
+  Verifying --> Rejected: any verification MUST fails — scheme code (F-035)
+  Verifying --> Verified: isValid true
+
+  Verified --> Settling: POST /settle — full independent re-verification inside settle() (F-036)
+  Settling --> SettleFailed: rejection, submission failure, or on-chain failure — scheme code
+  Settling --> Settled: transaction SUCCESS, 64-hex hash in receipt (F-038)
+
+  state "Settled — outcome fixed; indexing runs after and off this path (D-015)" as Settled
+  Settled --> NotListed: no bazaar extension echoed by the client (F-032)
+  Settled --> Indexing: bazaar extension present
+
+  Indexing --> Indexed: EXTENSION-RESPONSES status success
+  Indexing --> SoftDropped: client-attributable defect — status rejected + bazaar_* code (D-014)
+  Indexing --> IndexerFault: walras-internal fault — header omitted, logged (D-025)
+
+  Rejected --> [*]
+  SettleFailed --> [*]
+  NotListed --> [*]
+  Indexed --> [*]
+  SoftDropped --> [*]
+  IndexerFault --> [*]
+
+  note right of Rejected
+    machine code + non-null human reason,
+    on every rejection path (RFP 3.6)
+  end note
+  note right of SoftDropped
+    settlement stays successful —
+    only the catalog write is refused
+    (proven live: EVIDENCE S3-4, S5-3)
+  end note

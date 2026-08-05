@@ -21,6 +21,14 @@ import type {
 import { describeConfig, type FacilitatorConfig } from "./config.js";
 import { buildFacilitator } from "./facilitator.js";
 import { reasonText, WalrasRejection } from "./errors.js";
+import {
+  DISCOVERY_RESOURCES_ROUTE,
+  DISCOVERY_SEARCH_ROUTE,
+  HEALTH_ROUTE,
+  SETTLE_ROUTE,
+  SUPPORTED_ROUTE,
+  VERIFY_ROUTE,
+} from "./routeSchemas.js";
 
 /** The x402 protocol version this facilitator speaks (FACTS F-040). */
 const X402_VERSION = 2;
@@ -384,6 +392,16 @@ export function buildServer(options: BuildServerOptions): FastifyInstance {
 
   const app = Fastify({ logger: options.logger ?? false });
 
+  // The route schemas from routeSchemas.ts are documentation, not enforcement — they
+  // are the single source `pnpm docs:gen` exports docs/api/openapi.yaml from. These
+  // no-op compilers keep runtime behavior byte-identical to a schema-less app:
+  // request validation stays in the handlers (named walras_* rejections, never
+  // Fastify's generic 400s or Ajv's type coercion, which would break the handlers'
+  // typeof-string checks), and responses serialize with plain JSON.stringify instead
+  // of a schema-derived fast serializer that could drop additive fields.
+  app.setValidatorCompiler(() => () => true);
+  app.setSerializerCompiler(() => data => JSON.stringify(data));
+
   app.addHook("onClose", async () => {
     try {
       bazaarStore.close();
@@ -411,7 +429,7 @@ export function buildServer(options: BuildServerOptions): FastifyInstance {
     },
   );
 
-  app.post("/verify", async (request, reply) => {
+  app.post("/verify", { schema: VERIFY_ROUTE.schema }, async (request, reply) => {
     let envelope: FacilitatorRequestBody;
     try {
       envelope = parseEnvelope(request.body);
@@ -432,7 +450,7 @@ export function buildServer(options: BuildServerOptions): FastifyInstance {
     return reply.code(200).send(withVerifyReason(result));
   });
 
-  app.post("/settle", async (request, reply) => {
+  app.post("/settle", { schema: SETTLE_ROUTE.schema }, async (request, reply) => {
     let envelope: FacilitatorRequestBody;
     try {
       envelope = parseEnvelope(request.body);
@@ -488,7 +506,7 @@ export function buildServer(options: BuildServerOptions): FastifyInstance {
     return reply.code(200).send(withSettleReason(result));
   });
 
-  app.get("/discovery/resources", async (request, reply) => {
+  app.get("/discovery/resources", { schema: DISCOVERY_RESOURCES_ROUTE.schema }, async (request, reply) => {
     // Spec shape throughout (FACTS F-025, F-027): seven filters in, an
     // `items` array out (never `resources` — that name belongs to search,
     // DECISIONS D-001), pagination as {limit, offset, total}.
@@ -506,7 +524,7 @@ export function buildServer(options: BuildServerOptions): FastifyInstance {
     return reply.code(200).send(toListResponse(bazaarStore.list(params)));
   });
 
-  app.get("/discovery/search", async (request, reply) => {
+  app.get("/discovery/search", { schema: DISCOVERY_SEARCH_ROUTE.schema }, async (request, reply) => {
     // Spec shape throughout (FACTS F-026 … F-028): required natural-language
     // `query`, the same five filters as the list endpoint, advisory
     // limit/cursor in; a `resources` array (never `items`, DECISIONS D-001),
@@ -534,14 +552,14 @@ export function buildServer(options: BuildServerOptions): FastifyInstance {
     }
   });
 
-  app.get("/supported", async (_request, reply) => {
+  app.get("/supported", { schema: SUPPORTED_ROUTE.schema }, async (_request, reply) => {
     // Straight from the facilitator core: `kinds`, `extensions`, and `signers` are all
     // required (FACTS F-040), and the Stellar kind carries `extra.areFeesSponsored`
     // because `ExactStellarScheme.getExtra()` supplies it (FACTS F-041, F-044).
     return reply.code(200).send(facilitator.getSupported());
   });
 
-  app.get("/health", async (_request, reply) => {
+  app.get("/health", { schema: HEALTH_ROUTE.schema }, async (_request, reply) => {
     return reply.code(200).send({
       status: "ok",
       x402Version: X402_VERSION,

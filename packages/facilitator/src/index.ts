@@ -3,12 +3,23 @@ import { resolve } from "node:path";
 import { describeConfig, loadConfig, ConfigError } from "./config.js";
 import { buildServer } from "./server.js";
 
-export { loadConfig, describeConfig, ConfigError } from "./config.js";
-export type { FacilitatorConfig, FeeMode, Env } from "./config.js";
+export { loadConfig, describeConfig, ConfigError, CONFIG_REFERENCE } from "./config.js";
+export type { FacilitatorConfig, FeeMode, Env, ConfigVarDoc } from "./config.js";
 export { buildFacilitator } from "./facilitator.js";
 export { buildServer } from "./server.js";
 export type { BuildServerOptions } from "./server.js";
 export * from "./errors.js";
+export {
+  ROUTES,
+  COMPONENT_SCHEMAS,
+  VERIFY_ROUTE,
+  SETTLE_ROUTE,
+  SUPPORTED_ROUTE,
+  DISCOVERY_RESOURCES_ROUTE,
+  DISCOVERY_SEARCH_ROUTE,
+  HEALTH_ROUTE,
+} from "./routeSchemas.js";
+export type { RouteDescriptor, ResponseHeaderDoc, SchemaObject } from "./routeSchemas.js";
 
 /**
  * Loads `.env` from the repository root when present, without adding a dependency.

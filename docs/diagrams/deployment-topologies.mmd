@@ -1,0 +1,30 @@
+%%{init: {'theme': 'neutral'}}%%
+%% The three deployment topologies of RFP 3.1. Hosted and self-hosted are the
+%% same binary with different operators; self-facilitation is PLANNED (grant
+%% scope) — the seam exists (buildServer takes injected config/store) but no
+%% packaged embedding mode ships in the pre-build.
+flowchart TB
+  subgraph hosted ["1 — Hosted (operator runs walras for many tenants)"]
+    hs1["Seller A"] --> hf["walras facilitator<br/>(hosted instance)"]
+    hs2["Seller B"] --> hf
+    hb["Buyers / agents"] --> hs1
+    hb --> hs2
+    hf --> hc[("Stellar network")]
+    hf --> hdb[("shared catalog —<br/>cross-seller discovery")]
+  end
+
+  subgraph selfhosted ["2 — Self-hosted (seller runs its own walras)"]
+    ss["Seller's resource server"] --> sf["walras facilitator<br/>(seller-operated, same code:<br/>git clone + SUBMITTER_SECRET)"]
+    sb["Buyers / agents"] --> ss
+    sf --> sc[("Stellar network")]
+    sf --> sdb[("own catalog —<br/>lists what settles here")]
+  end
+
+  subgraph selffac ["3 — Self-facilitation inside a resource server — PLANNED"]
+    direction TB
+    pb["Buyers / agents"] --> ps["resource server process"]
+    subgraph ps ["resource server process"]
+      routes["paid routes"] -- "in-process, no HTTP hop" --> emb["embedded facilitator<br/>(buildServer already takes<br/>injected config + store)"]
+    end
+    emb --> pc[("Stellar network")]
+  end

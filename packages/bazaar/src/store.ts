@@ -160,7 +160,12 @@ export const MAX_SEARCH_RETRIEVE = 1000;
  */
 const BUSY_TIMEOUT_MS = 100;
 
-const SCHEMA_SQL = `
+/**
+ * The catalog schema DDL — exported as the single source `pnpm docs:gen`
+ * generates the catalog ERD from (writing rule R3). Runtime behavior is
+ * unchanged by the export; `BazaarStore` remains the only writer.
+ */
+export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS resources (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   resource       TEXT NOT NULL,

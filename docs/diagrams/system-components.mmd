@@ -1,0 +1,41 @@
+%%{init: {'theme': 'neutral'}}%%
+%% As-built component map. References: FACTS F-045 (scheme owns payment MUSTs),
+%% F-049 (discovery layer is our build), D-015 (indexing off the payment path),
+%% F-080 (mcp-server is entirely our build).
+flowchart LR
+  subgraph buyers ["Buyers and agents (stock SDKs)"]
+    buyer["HTTP buyer<br/>@x402/fetch or axios"]
+    agent["Any MCP client<br/>(zero walras imports)"]
+  end
+
+  subgraph sellers ["Sellers (stock SDKs)"]
+    httpseller["HTTP resource server<br/>@x402/express middleware"]
+    mcpseller["Paid MCP tool server<br/>@x402/mcp createPaymentWrapper"]
+  end
+
+  subgraph walras ["walras (this repository)"]
+    subgraph facilitator ["packages/facilitator"]
+      http["Fastify surface<br/>POST /verify · POST /settle<br/>GET /supported · GET /health<br/>GET /discovery/resources<br/>GET /discovery/search"]
+      scheme["ExactStellarScheme<br/>from @x402/stellar —<br/>every payment MUST,<br/>37 reason codes"]
+    end
+    subgraph bazaar ["packages/bazaar"]
+      indexer["indexer<br/>(discovery trust boundary)"]
+      store[("SQLite store, WAL<br/>+ FTS5 search index")]
+    end
+    mcpsrv["packages/mcp-server<br/>search_resources · paid_call"]
+  end
+
+  chain[("Stellar network<br/>via Soroban RPC")]
+
+  buyer -- "402 / PAYMENT-SIGNATURE" --> httpseller
+  agent -- "MCP over stdio" --> mcpsrv
+  httpseller -- "POST /verify · /settle" --> http
+  mcpseller -- "POST /verify · /settle" --> http
+  http --> scheme
+  scheme -- "simulate · submit" --> chain
+  http -- "on settle success only" --> indexer
+  indexer --> store
+  http -- "list · search" --> store
+  mcpsrv -- "GET /discovery/search" --> http
+  mcpsrv -- "pays live 402s of" --> httpseller
+  mcpsrv -- "pays live 402s of" --> mcpseller

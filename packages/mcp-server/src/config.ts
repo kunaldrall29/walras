@@ -24,6 +24,60 @@ export class ConfigError extends Error {}
 /** Default per-call cap: 1 USDC = 10^7 base units (7 decimals, FACTS F-008). */
 const DEFAULT_MAX_AMOUNT = 10_000_000n;
 
+/** Default facilitator base URL — a locally running walras facilitator. */
+const DEFAULT_FACILITATOR_URL = "http://127.0.0.1:4021";
+
+/** Default network the paying wallet settles on. */
+const DEFAULT_NETWORK = "stellar:testnet";
+
+/**
+ * The MCP server's configuration surface, as data — the single source
+ * `pnpm docs:gen` generates its slice of `docs/reference/config.md` from
+ * (writing rule R3). Shape matches the facilitator's `ConfigVarDoc`;
+ * `test/config-reference.test.ts` guards against drift from `loadConfig`.
+ */
+export const CONFIG_REFERENCE = [
+  {
+    name: "FACILITATOR_URL",
+    required: "no",
+    defaultValue: DEFAULT_FACILITATOR_URL,
+    format: "http(s) URL",
+    description:
+      "Base URL of the walras facilitator whose discovery endpoints search_resources " +
+      "queries and whose settlements paid_call pays through.",
+  },
+  {
+    name: "WALRAS_MCP_NETWORK",
+    required: "no",
+    defaultValue: DEFAULT_NETWORK,
+    format: "CAIP-2 network identifier",
+    description:
+      "The one network this server's wallet pays on. A 402 demanding any other " +
+      "network is declined by policy before anything is signed (DECISIONS D-030).",
+  },
+  {
+    name: "WALRAS_MCP_MAX_AMOUNT",
+    required: "no",
+    defaultValue: `${DEFAULT_MAX_AMOUNT} (1 USDC)`,
+    format: "non-negative integer, asset base units (USDC: 7 decimals, FACTS F-008)",
+    description:
+      "Per-call spend cap, enforced twice: as a pre-payment check against the probed " +
+      "402, and as a payment-requirements policy on the shared x402 client so no " +
+      "transport can bypass it (FACTS F-081; DECISIONS D-030).",
+  },
+  {
+    name: "CLIENT_STELLAR_PRIVATE_KEY",
+    required: "no",
+    defaultValue: null,
+    format: "'S...' Ed25519 secret seed (56 chars)",
+    description:
+      "The paying wallet. Unset, the server runs search-only and paid_call names the " +
+      "gap (walras_mcp_wallet_not_configured). A malformed value — including the " +
+      ".env.example placeholder — is a startup error (exit 78), never a late payment " +
+      "failure.",
+  },
+] as const;
+
 /**
  * Loads configuration from the environment.
  *
@@ -32,14 +86,14 @@ const DEFAULT_MAX_AMOUNT = 10_000_000n;
  * @throws {ConfigError} When a value is present but malformed.
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): McpServerConfig {
-  const facilitatorUrl = env.FACILITATOR_URL ?? "http://127.0.0.1:4021";
+  const facilitatorUrl = env.FACILITATOR_URL ?? DEFAULT_FACILITATOR_URL;
   try {
     void new URL(facilitatorUrl);
   } catch {
     throw new ConfigError(`FACILITATOR_URL is not a URL: ${facilitatorUrl}`);
   }
 
-  const network = env.WALRAS_MCP_NETWORK ?? "stellar:testnet";
+  const network = env.WALRAS_MCP_NETWORK ?? DEFAULT_NETWORK;
 
   let maxAmount = DEFAULT_MAX_AMOUNT;
   const rawCap = env.WALRAS_MCP_MAX_AMOUNT;
