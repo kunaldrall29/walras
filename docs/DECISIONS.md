@@ -502,3 +502,60 @@ D-003 committed to real cursor pagination against the spec's advisory MAY. The m
   search no bounds of its own; `query` is required and named `query` (D-006), with a
   dedicated 400 (`walras_missing_search_query`) whose text points hand-typed `q=` callers
   at the right name.
+
+## D-028 — MCP tool errors: never throw; dual-format `{errorCode, reason}` results, facilitator codes passed through verbatim.
+**Status:** ADOPTED · 2026-08-05 · Evidence: F-078 … F-080; EVIDENCE S6-2, S6-3
+
+The RFP's "non-null machine-readable reason on every rejection" crosses the MCP
+boundary intact:
+
+- A domain failure is a **tool result** with `isError: true`, never a thrown
+  JSON-RPC error: `structuredContent` = `{errorCode, reason}` and `content[0].text` =
+  the JSON-stringified same object. The dual format is the transport spec's own rule
+  for 402s (F-079) applied to every result, success included, so a client sees one
+  contract regardless of structured-content support. Determinism is asserted in tests:
+  identical calls → identical bytes.
+- `errorCode` reuses the facilitator's taxonomies (D-007) **verbatim** whenever the
+  rejection originated there — a discovery-envelope code from a search 400, or a
+  scheme code arriving in a settle receipt's `errorReason` (checked against the
+  facilitator's own `ALL_REASON_CODES` export, so upstream drift breaks the build,
+  not the passthrough). Codes prefixed `walras_mcp_*` cover only the surface this
+  server owns: argument validation, id resolution, reachability, spend policy,
+  unsettled payments. walras never mints a parallel code for a rejection the
+  facilitator already names.
+
+## D-029 — resourceId: versioned self-describing encoding of the listing tuple; ids never outlive the catalog.
+**Status:** ADOPTED · 2026-08-05 · Evidence: F-029; D-024; EVIDENCE S6-3
+
+`id = "wr1:" + base64url(JSON [type, resource, toolName])` — the catalog identity
+tuple of D-024, nothing else. Deterministic (same listing → same id on every server,
+no id table to persist or replicate), self-describing (paid_call recovers the target
+without a lookup service), and versioned (`wr1:` leaves room to change the scheme
+without ambiguity). Two honesty rules: parsing is strict on every axis (prefix,
+base64url alphabet, arity, type discriminator, http↔toolName consistency — 11
+rejection cases in tests), and paid_call re-resolves the id against the live catalog
+before paying, so a stale id yields `walras_mcp_unknown_resource_id` rather than a
+payment to a delisted resource. The catalog stays advisory: payment terms always come
+from the seller's live 402, exactly as the protocol's trust model has it.
+
+## D-030 — Client-side spend cap, enforced twice; the MCP server pays only exact@its-network under WALRAS_MCP_MAX_AMOUNT.
+**Status:** ADOPTED · 2026-08-05 · Evidence: F-081; EVIDENCE S6-2
+
+paid_call holds an agent's wallet, so an unbounded auto-payer is the one thing it must
+never be. The cap (default 10 000 000 base units = 1 USDC, F-008) binds at two layers:
+
+- **Pre-payment check:** the probed 402's `accepts` is filtered to
+  `exact@<configured network>` and its cheapest amount compared to the cap — an
+  over-cap or foreign-network demand returns
+  `walras_mcp_payment_declined_by_policy` with the amounts named, before anything is
+  signed. On the MCP leg the same check runs in `onPaymentRequested`, aborting inside
+  the stock client's own flow.
+- **`registerPolicy` on the one shared `x402Client`** (F-081): the identical filter as
+  a payment-requirements policy, making the bound unbypassable for every payment
+  either transport could ever make — a fresh 402 with a raised price hits the policy
+  even though the pre-check saw the old one. Tests assert the paying seam is never
+  invoked on a declined call.
+
+Only `CLIENT_STELLAR_PRIVATE_KEY` enables payment at all; without it the server runs
+search-only and paid_call names the gap (`walras_mcp_wallet_not_configured`) — after
+the probe, so free resources still work walletless.

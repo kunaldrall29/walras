@@ -18,7 +18,8 @@ Apache-2.0. Built against the pinned spec commit
 | Settle-gated automatic cataloging + `GET /discovery/resources` (seven filters) | **proven** — pay → listed, zero registration; hostile writes soft-dropped with machine reasons; EVIDENCE S3-3/S3-4 |
 | `GET /discovery/search` — BM25 ranking, cursor pagination, truthful `partialResults` | **proven** — recall@5 0.93, MRR@10 0.91 on a 28-query eval; EVIDENCE S4-3/S4-4 |
 | One-command demo: search → pay → tx hash → auto-listed, plus three negative paths | **proven** — EVIDENCE S5-2/S5-3 |
-| Measured settlement fee | **0.0022973 XLM** (22 973 stroops), uniform across every observed settlement — EVIDENCE S2-3, S5-2 |
+| MCP server — an agent completes discover→pay using **only** `search_resources` + `paid_call` | **proven** — a generic MCP client paid an http listing *and* a live MCP tool (which its own settlement auto-cataloged); EVIDENCE S6-3 |
+| Measured settlement fee | **0.0022973 XLM** (22 973 stroops), uniform across every observed settlement — EVIDENCE S2-3, S5-2, S6-3 |
 
 The facilitator wraps [`@x402/stellar`](https://www.npmjs.com/package/@x402/stellar)'s
 `ExactStellarScheme`, which already enforces every MUST in the exact-Stellar scheme spec.
@@ -122,6 +123,43 @@ non-null human-readable reason.
 Fees are sponsored by the configured submitter account: the buyer needs the payment asset
 and never spends a sequence number or pays a network fee.
 
+## MCP server: the Bazaar as two agent tools
+
+[`packages/mcp-server`](./packages/mcp-server) exposes the whole discover→pay loop to
+any MCP client (Claude Code, or anything speaking the protocol) as two tools over
+stdio:
+
+- **`search_resources(query, filters?)`** — ranked catalog search. Each hit carries a
+  deterministic `id`, name, description, price (USDC base units), network, and the
+  machine-readable calling convention (method, example values, JSON Schema).
+- **`paid_call(resourceId | url [+ toolName], input?)`** — calls the resource, paying
+  its 402 automatically through walras with the server's Stellar wallet: http
+  endpoints via the stock `@x402/fetch` path, MCP tools via the stock `@x402/mcp`
+  client. Returns the result plus a receipt `{transaction, network, payer}` with the
+  on-chain hash. Per-call spend is capped (`WALRAS_MCP_MAX_AMOUNT`, default 1 USDC) —
+  an over-cap 402 is refused before anything is signed.
+
+Every failure, on every path, is a structured `{errorCode, reason}` — facilitator
+codes pass through verbatim; the server never throws free-text at an agent.
+
+```bash
+./scripts/mcp-demo.sh   # facilitator + stock seller + a PAID MCP TOOL seller, then a
+                        # generic MCP client (zero walras imports) does:
+                        # search → pay by id → pay an MCP tool by (url, toolName)
+                        # → that settlement auto-catalogs the tool → re-found in
+                        # search → re-paid by its minted id. Three on-chain receipts.
+```
+
+Point an interactive client at it with:
+
+```json
+{ "command": "node", "args": ["packages/mcp-server/dist/index.js"],
+  "env": { "FACILITATOR_URL": "http://127.0.0.1:4021", "CLIENT_STELLAR_PRIVATE_KEY": "S..." } }
+```
+
+Without `CLIENT_STELLAR_PRIVATE_KEY` the server runs search-only and `paid_call`
+says so (`walras_mcp_wallet_not_configured`).
+
 ## Configuration
 
 `SUBMITTER_SECRET` is the only required variable. The full table, including `FEE_MODE`,
@@ -131,7 +169,7 @@ and never spends a sequence number or pays a network fee.
 ## Development
 
 ```bash
-pnpm test              # single-SDK assertion, then the workspace suites (157 tests)
+pnpm test              # single-SDK assertion, then the workspace suites (204 tests)
 pnpm typecheck
 pnpm check:licenses    # gate G-LIC — no copyleft in the dependency tree
 pnpm eval:search       # search-quality eval: 28 labeled queries against the corpus

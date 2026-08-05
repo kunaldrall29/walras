@@ -1742,9 +1742,115 @@ fee, and the buyer never paid one (F-006).
 
 ---
 
+## S6-1 — Session 6 pre-flight gate G6.1 (2026-08-05)
+
+**Session 5 done:** FACTS update log rows through 2026-08-03 + EVIDENCE S5-1 … S5-5
+present; `git log` shows the S5 hardening commits (`fed532b` … `6ee7ac7`).
+
+**`@x402/mcp` license + surface, verified four independent ways:**
+
+1. **npm registry:** `npm view @x402/mcp@2.20.0` → `license = 'Apache-2.0'`;
+   dependencies `@modelcontextprotocol/sdk ^1.12.1` (MIT), `zod ^3.24.2` (MIT),
+   `@x402/core ~2.20.0` (Apache-2.0). → F-078.
+2. **Pinned source:** full read of `typescript/packages/mcp/src/` @ SHA `17fc9890…` —
+   exports, constants, client/server flow. → F-078/F-080.
+3. **Spec text:** `specs/transports-v2/mcp.md` exists at the pinned SHA and fixes the
+   dual-format 402 result, `_meta["x402/payment"]`, `_meta["x402/payment-response"]`,
+   and settle-failure semantics. → F-079.
+4. **Installed artifact:** after `pnpm install`, the published bundle re-probed from
+   the workspace: `MCP_PAYMENT_META_KEY="x402/payment"`,
+   `MCP_PAYMENT_RESPONSE_META_KEY="x402/payment-response"`,
+   `MCP_PAYMENT_REQUIRED_CODE=402`, `x402MCPClient`/`createPaymentWrapper`/
+   `wrapMCPClientWithPayment` all functions — matching the source read (the F-063
+   source-vs-artifact discipline).
+
+**G-LIC re-run after adding `@modelcontextprotocol/sdk@1.30.0` (MIT, resolved once for
+the whole tree, built against the workspace `zod@3.25.76`), `@x402/mcp@2.20.0`:**
+`GATE G-LIC: PASS — no copyleft or undeclared licenses in tree`;
+`check:deps PASS — exactly one @stellar/stellar-sdk in the tree (16.2.0)`.
+
+**Policywright provenance:** no local checkout exists in this environment; zero code
+was read or imported from it. `packages/mcp-server` shares only the generic public
+MCP-server shape (tools + schemas over stdio).
+
+## S6-2 — packages/mcp-server test suite (2026-08-05)
+
+`pnpm --filter @walras/mcp-server test` → **47/47 pass** (5 files); workspace total
+after S6: **204/204** (bazaar 64, facilitator 93, mcp-server 47).
+
+What is real and what is a double — labeled per the D-017 discipline:
+
+- **Real:** the MCP protocol itself. Every `server.test.ts` case is an actual MCP
+  client session over `InMemoryTransport.createLinkedPair()` — JSON-RPC initialize,
+  `tools/list`, `tools/call`. The mcp-typed leg (`paid-call-mcp.test.ts`) drives the
+  REAL `@x402/mcp` `x402MCPClient` against a transport-spec-compliant paid-server
+  double: payment rides `_meta["x402/payment"]`, receipts ride
+  `_meta["x402/payment-response"]`, 402s are dual-format (F-079). Wire headers in the
+  http-leg doubles are produced by the STOCK `@x402/core` encoders
+  (`encodePaymentRequiredHeader` / `encodePaymentResponseHeader`), so the doubles
+  cannot drift from the real codec.
+- **Doubles:** the chain-touching seams only — `payingFetch` (stock
+  `wrapFetchWithPayment` product in production) and the payment scheme (a fake
+  `SchemeNetworkClient` returning an unsigned placeholder payload). The real signed
+  path is S6-3's live run.
+
+Coverage highlights: dual-format determinism (identical calls → identical bytes;
+`content[0].text === JSON.stringify(structuredContent)`); facilitator error-code
+passthrough verbatim (`walras_invalid_search_cursor` from a search 400,
+`verification_failed` from a failed settle receipt); the spend cap declining over-cap
+and foreign-network 402s **before** any payment with the paying seam observably never
+invoked; one visible retry then honest failure; free resources returning `paid=false`
+without engaging payment; resource-id codec strictness (11 malformed-id rejections);
+search-only mode when no wallet is configured.
+
+## S6-3 — Live MCP session on `stellar:testnet`: discover→pay using ONLY MCP tools (2026-08-05)
+
+`./scripts/mcp-demo.sh` → **exit 0, 24/24 in-session assertions**, transcript at
+`demo-logs/run-20260805T175435Z-mcp/mcp-session.log`. Topology: walras facilitator
+(fresh catalog `data/mcp-demo-catalog.db`) + stock `@x402/express` seller (11 corpus
+routes) + **paid MCP tool seller** `demo/mcp-seller.ts` — stock
+`createPaymentWrapper` from `@x402/mcp` over `x402ResourceServer` +
+`HTTPFacilitatorClient` → walras, tool `grandiloquate` at
+`http://127.0.0.1:4023/mcp`, price $0.02, `declareDiscoveryExtension({toolName…})`.
+
+The client, `demo/mcp-session.ts`, is a **generic MCP client with zero walras and
+zero `@x402/*` imports**: it spawns `packages/mcp-server/dist/index.js` over stdio,
+learns both tools from `tools/list`, and drives everything from the JSON the tools
+return. Catalog seeded by 4 real settlements (`ad4b5abd…92a2`, `902fc894…14df`,
+`b911eec8…bc64`, `70e9f0a3…abf5`), then, in one session:
+
+| step | call | outcome |
+|---|---|---|
+| 2 | `search_resources "current weather in Zurich"` | 3 ranked hits, ids minted, F-082 input schema + example on each |
+| 3 | `paid_call {resourceId}` (http listing) | paid, tx `79b541be…b800` |
+| 4 | `paid_call {resourceId: "wr1:bm90…"}` | `isError`, `{errorCode: "walras_mcp_unknown_resource_id", reason: …}` |
+| 5 | `search_resources {cursor: "AAAA-not-a-cursor"}` | `isError`, **facilitator code passthrough verbatim**: `walras_invalid_search_cursor` |
+| 6 | `paid_call {url, toolName: "grandiloquate"}` | **paid an MCP TOOL**, tx `d57ccaea…8d02`; result `{"grandiloquent":"Salutations most esteemed companion"}` |
+| 7 | `search_resources "grandiloquent victorian translation" {type: mcp}` | the tool **appeared in the catalog** — listed by step 6's settlement alone (settle-gated, D-004), tuple key (url, toolName) per F-029, `type:"mcp"` |
+| 8 | `paid_call {resourceId}` (the minted mcp id) | paid again by id, tx `641f3e35…7b8d`; result `{"grandiloquent":"Supremely agreeable twilight hour"}` |
+| 9 | Horizon | all three txs `successful=true`, ledgers 3986461 / 3986463 / 3986465, **fee 22 973 stroops each — the F-069 walras constant to the stroop** |
+
+```
+MCP-SESSION-REPORT {"query":"current weather in Zurich",
+ "httpPaid":"79b541beb3ac7f2e9249b5270b0ee6900a3d9837ecce9a7b9e0f64a855feb800",
+ "mcpPaidByUrl":"d57ccaeafb912a388bce2f19751e17588b86103ed55ff5e1e6dd74e54afc8d02",
+ "mcpPaidById":"641f3e35294d1117dda0462a4050fa83237982a1276d8ac44a0577a59f007b8d",
+ "failures":0}
+mcp-session: PASS — discover→pay completed using ONLY MCP tools
+```
+
+Step 7 is the session's strongest claim, previously listed under "Not yet captured":
+a **live MCP seller cataloged by settlement** — the client echo of the bazaar
+extension happened inside the stock `@x402/mcp`/`@x402/core` payment path (F-032
+client behavior), walras extracted and keyed it as `(resource.url, toolName)`, and the
+next search served it to the same agent that had caused the listing. Discover→pay ran
+in both directions across both resource types with no registration call anywhere.
+
+---
+
 ## Not yet captured
 
 | Section | Blocked on |
 |---|---|
 | **Fee-bump settlement by walras** | Config only (`FEE_BUMP_SECRET` + a funded fee account); knob shipped and unit-tested in S1. See D-021. |
-| **MCP tool cataloged from a live MCP seller** | Out of pre-build scope. Tuple keying (F-029) is proven at store/indexer/HTTP level (S3-2); a live MCP seller is proposal scope. |
+| ~~**MCP tool cataloged from a live MCP seller**~~ | **CAPTURED in S6-3** (2026-08-05): `demo/mcp-seller.ts` settled through walras and was auto-cataloged under the (url, toolName) tuple, then re-discovered and re-paid by id in the same MCP session. |
