@@ -97,7 +97,7 @@ validation, kind routing, discovery query interpretation, and wrapper faults.
 | `walras_invalid_search_cursor` | The 'cursor' parameter is not a cursor this facilitator issued for this query and filter combination. Repeat the search without a cursor to start a new walk. |
 | `walras_internal_error` | The facilitator failed to process the request. This says nothing about the payment's validity. |
 
-## Bazaar cataloging soft-drop codes (6)
+## Bazaar cataloging soft-drop codes (7)
 
 Never appear in a payment response — only inside the `bazaar` object of the
 `EXTENSION-RESPONSES` header, alongside the human-readable `rejectedReason`
@@ -111,6 +111,7 @@ than blaming the client (DECISIONS D-025).
 | `bazaar_extensions_too_large` | The extensions object exceeds the 64 KiB indexing limit and was not cataloged. |
 | `bazaar_spec_validation_failed` | The discovery info violates the bazaar protocol invariants. |
 | `bazaar_schema_validation_failed` | The discovery info failed schema validation. |
+| `bazaar_schema_too_complex` | The discovery schema is too large or deeply nested to validate within the indexer's bounds. |
 | `bazaar_resource_url_invalid` | resource.url must be an absolute http(s) URL without credentials. |
 | `bazaar_listing_owned_by_other_payee` | This resource is already cataloged for a different payment recipient; a listing can only be updated by payments to its original payTo. |
 

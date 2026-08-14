@@ -26,7 +26,7 @@ an empty result list, not an error, which is the worst kind of conformance bug.
 ---
 
 ## D-002 — `lastUpdated`: the spec and the SDK contradict each other. Follow the SDK.
-**Status:** ADOPTED · 2026-08-02 · Evidence: F-050 · **Also UPSTREAM**
+**Status:** ADOPTED · 2026-08-02 · Evidence: F-050 · Upstream: **FOUND, NOT FILED** (D-036)
 
 A direct conflict at the same commit:
 
@@ -45,6 +45,7 @@ against and the RFP's acceptance test is "reviewers point stock SDK code at the 
 **Upstream:** file an issue against x402-foundation/x402 noting the spec/SDK conflict. This is
 exactly the class of interop bug report the RFP names as a strong signal (RFP §4, "Conformance
 discipline"). Track the outcome; if the spec wins, this entry is superseded.
+**Not filed as of 2026-08-14** — see D-036 for why and for the other three.
 
 ---
 
@@ -144,7 +145,7 @@ footnote. Revisit if the `--expired` negative test (S5) behaves surprisingly nea
 ---
 
 ## D-009 — The reference e2e catalog violates the spec's MCP keying MUST.
-**Status:** UPSTREAM · 2026-08-02 · Evidence: F-029, F-027
+**Status:** FOUND, NOT FILED · 2026-08-02 · Evidence: F-029, F-027 · Filing posture: D-036
 
 `bazaar.md` states facilitators **MUST** key MCP resources on the tuple
 (`resource.url`, `input.toolName`), because MCP multiplexes many tools over one endpoint. The
@@ -172,6 +173,16 @@ submission: it is the RFP's own "advertised vs reachable support" point, evidenc
 
 **Corollary:** walras should list `bazaar` in its own `/supported.extensions`, which would make it
 the reachable Stellar Bazaar the RFP asks for.
+
+**Amendment (2026-08-14, S0-7, F-090, F-091).** A second baseline was finally captured, and it
+changes the evidence without changing the decision. `periplo-testnet.fly.dev` **does** advertise
+`extensions: ["bazaar"]` — so the sentence "no facilitator advertises Bazaar" is now false and must
+not be repeated. But it serves neither discovery endpoint (both 404; its own service index lists
+only `/health`, `/supported`, `/verify`, `/settle`). **The conclusion survives, with a sharper
+reason:** there is still no discovery baseline to diff against — previously because nobody claimed
+Bazaar, now because the one operator that claims it does not implement it. State it that way in the
+submission; the stronger, more honest version of the RFP's "advertised vs reachable" point is that
+the failure is already observable in the wild, not that nobody has tried.
 
 ---
 
@@ -319,7 +330,7 @@ line number.
 ---
 
 ## D-019 — The e2e mock facilitator breaks its own contract; one-line scaffolding fix.
-**Status:** UPSTREAM · 2026-08-02 · Evidence: F-068, EVIDENCE S2-4
+**Status:** FOUND, NOT FILED · 2026-08-02 · Evidence: F-068, EVIDENCE S2-4 · Filing posture: D-036
 
 The e2e harness boots a mock facilitator whose documented purpose is to "claim to support
 all schemes/networks" so servers whose routes exceed the real facilitator's kinds can still
@@ -340,7 +351,7 @@ precondition of the RFP's own acceptance path, not a convenience.
 ---
 
 ## D-020 — The fastify e2e server cannot run against single-family facilitators. Excluded, not patched.
-**Status:** UPSTREAM · 2026-08-02 · Evidence: F-068, EVIDENCE S2-4
+**Status:** FOUND, NOT FILED · 2026-08-02 · Evidence: F-068, EVIDENCE S2-4 · Filing posture: D-036
 
 `servers/express`, `servers/hono`, and `servers/next` all read `MOCK_FACILITATOR_URL` and
 attach the mock as a fallback facilitator client. `servers/fastify/index.ts` never
@@ -595,3 +606,219 @@ A version bump of an excepted package re-triggers review because entries pin exa
 versions. Alternatives rejected: dropping rendered SVGs (R6 requires committed,
 regenerable diagrams) and switching renderers (every maintained mermaid renderer
 carries the same transitive tree).
+
+---
+
+## D-032 — URL squatting is an accepted, disclosed limitation, not a defended property.
+**Status:** ADOPTED · 2026-08-14 · Evidence: F-088; D-024; THREAT-MODEL "URL squatting"
+
+An adversarial audit (a parallel review session) reproduced the attacker-FIRST ordering
+against the shipped code: an attacker settles a dust self-payment whose verified `payTo`
+is the attacker's own address while echoing a victim's `resource.url` and attacker-authored
+metadata. Because listing identity is bound to the FIRST settled `payTo` (D-024) and a
+settled payment carries no proof that its `payTo` controls the echoed URL's origin, the
+attacker's listing is created; the real seller's later honest settlement is then rejected
+`bazaar_listing_owned_by_other_payee` and they are locked out of their own URL.
+
+This was already disclosed in THREAT-MODEL, but only as prose with "no test"; the
+honest-first ordering was the only one exercised (EVIDENCE S3-4 #2, `demo/hostile-client.ts`),
+which could read as a stronger claim than the boundary supports. The overwrite-prevention
+property (D-024) is real but defends the *second* claimant only.
+
+**Decision:** treat first-claim squatting as a **known, out-of-scope-for-the-pre-build
+limitation**, made visible three ways rather than papered over: (1) an attacker-FIRST
+regression test that pins the real behavior (squat succeeds, victim locked out); (2) a
+tightened THREAT-MODEL — the former "listing takeover ... prevented" framing now reads
+"overwrite of an *existing* listing ... does not prove the first claimant controls the
+URL"; (3) this record. A real fix needs proof-of-origin-control at index time (e.g. a
+signed challenge served from the resource origin, or a DNS/well-known binding of origin
+→ Stellar address) — grant-scope work, because it changes the seller onboarding UX and
+has no spec shape yet. The residual blast radius is bounded by design: the catalog is
+advisory, so a protocol-following buyer pays against the live 402 from the resource server
+itself — a squat pollutes metadata and denies the listing, but cannot redirect funds.
+
+---
+
+## D-033 — Indexer bounded-work has teeth: schema is neutralized before Ajv, and routeTemplate is hardened beyond the SDK.
+**Status:** ADOPTED · 2026-08-14 · Evidence: F-087, F-088; D-015, D-025
+
+The same audit falsified the letter of D-015/D-025's "structurally bounded" reasoning.
+Two findings, both reproduced against the installed `@x402/extensions@2.20.0` dist:
+
+- **ReDoS (F-087).** `validateDiscoveryExtension` compiles the CLIENT's `schema` with Ajv
+  (`new Ajv(...).compile(extension.schema)`), which turns a `pattern` straight into a
+  native `RegExp` with no safety policy, then runs it on the CLIENT's `info`. A
+  catastrophic-backtracking pattern (`^(a+)+$`) on a ~140-byte payload — 0.21 % of the
+  64 KiB cap — measured **36 s** of synchronous compute, quadrupling per +2 input chars.
+  Node is single-threaded and this runs INLINE on the settle response path, so it stalls
+  every concurrent request *after* the on-chain transfer has already committed. The byte
+  cap bounds row size, never regex runtime — so "the 64 KiB cap bounds Ajv cost" was wrong.
+
+- **routeTemplate under-decode (F-088).** The SDK's `isValidRouteTemplate` decodes exactly
+  once, so `%252e%252e` (double-encoded `..`), `//host` (protocol-relative), and `%00`
+  (percent-encoded null) all pass it. RFP 3.B explicitly requires the facilitator to reject
+  these; delegating wholly to the SDK did not.
+
+**Decision:** the indexer now makes the bound real without moving indexing off the response
+path (the EXTENSION-RESPONSES header MUST ride the settle response, F-024, so a fire-and-forget
+queue would lose it):
+1. **`boundSchemaForValidation`** deep-copies the client schema stripping every regex-bearing
+   keyword (`pattern`, `patternProperties`, `format`) and caps node count (`MAX_SCHEMA_NODES`
+   = 2000); over-budget → soft-drop `bazaar_schema_too_complex`. With no compiled `RegExp`,
+   validation is linear in the byte-capped `info` — no input drives it superlinear. Stripping
+   `pattern` only loosens shape validation, which is not the trust boundary (F-072); the
+   protocol-invariant check still runs.
+2. **`hardenRouteTemplate`** runs before the SDK check: bounded *repeated* percent-decode
+   (≤ 5 passes, reject if it doesn't stabilize), rejecting any decoded layer that contains
+   `..`, `://`, a backslash, a control char (covers `%00`), or begins `//`.
+3. A per-field **`soft_drops` audit table** (RFP 3.A: `listing_key`, `field`, `reason_code`,
+   `at`) records every field validated away, written in the same transaction as the upsert.
+4. Same-owner update **merges** (`?? existing`) instead of blanking, closing a same-owner
+   poisoning vector where a hostile buyer echoes a stripped extension to a seller's own
+   listing to erase its metadata.
+
+An async indexing queue with an enforced hard timeout remains the grant-scope defense-in-depth;
+it is not needed for correctness now that the synchronous work is genuinely bounded.
+
+---
+
+## D-034 — An S0 DoD item went uncaptured and untracked for 12 days. Recorded, not backdated.
+**Status:** ADOPTED (process) · 2026-08-14 · Evidence: F-090, F-091, EVIDENCE S0-7
+
+Session 0's DoD named two baseline facilitators. Only x402.org was captured (S0-2).
+`periplo-testnet.fly.dev` was never probed, and — the part that actually matters — **no row in
+FACTS, DECISIONS, or the "Not yet captured" table ever said so**. It was not deferred with a
+reason, not marked REFUTED, not blocked on anything. Nothing in the ledger distinguished
+"captured both" from "captured one", which is precisely the failure mode the FACTS discipline
+exists to prevent: an unrecorded gap reads as completed work.
+
+The gap was real but cheap — the capture, once attempted, took a single unauthenticated GET and
+returned a stronger result than expected (F-091 is a better finding than the missing row would
+have been). That is the uncomfortable part and the reason to write it down: the cost of the
+omission was not the work, it was the twelve days of a ledger that looked complete.
+
+**Decision:** capture it now (S0-7) and record the miss as its own entry rather than quietly
+closing it. **Do not backdate** — F-090/F-091 carry 2026-08-14, not 2026-08-02, and S0-7 is
+titled as late. Two standing rules follow:
+1. A DoD item that is not done gets a row **when it is discovered undone**, with an explicit
+   status (`REFUTED`, `DEFERRED — <reason>`, or `NOT CAPTURED — <blocker>`). Silence is not a
+   status.
+2. The "Not yet captured" table in EVIDENCE is the single index of known-open items and is
+   allowed to contain things nobody intends to do — an entry there costs nothing; a missing
+   entry cost this.
+
+---
+
+## D-035 — The docs site sits outside the gates by design; its deployed commit is now checkable.
+**Status:** ADOPTED · 2026-08-14 · Evidence: F-092, EVIDENCE Ops-1
+
+docs.walras.space had nothing tracking which commit was live: no deploy configuration in the
+repository, no pages/deploy job in `ci.yml`, no recorded deployment. The first measurement found
+it **one commit behind** — serving `ce3d9ca` against HEAD `c302fac`, i.e. rendered by the
+previous generation of its own builder (F-092).
+
+**Decision:** make the drift *detectable* without pretending the deployment is automated.
+1. `scripts/check-site.sh` fetches the live footer, extracts the stamped commit, and compares it
+   to a target (default `HEAD`), exiting non-zero on mismatch and listing the intervening
+   commits. The footer stamp (`build-site.mjs` L33/L346) is promoted from decoration to the
+   deploy marker of record — so a redeploy is verifiable by anyone, from outside, with curl.
+2. It is **not** added to `ci.yml`. It needs network, and a stale deploy is an ops condition,
+   not a broken commit — wiring it into CI would fail unrelated pull requests and train people
+   to ignore a red gate. The offline, deterministic character of the gates (gate-s2/s3/s4) is
+   worth more than uniformity here.
+3. The site therefore remains **outside** the gate set, and that is now a stated position with a
+   check attached rather than an unexamined gap. The deploy itself stays manual: nothing in this
+   repository can trigger it.
+
+Consequence to state plainly in the submission: docs.walras.space may lag the branch, and the
+footer commit is the authority on what a reader is actually looking at.
+
+---
+
+## D-036 — The upstream interop findings are FOUND, NOT FILED. No issue has been opened.
+**Status:** ADOPTED (honesty correction) · 2026-08-14 · Evidence: F-050, F-068, F-027, F-029; D-002, D-009, D-019, D-020
+
+Four divergences were identified in the spec, the reference implementation, and its e2e harness,
+each with a reproduction and a stop-condition already reasoned through:
+
+| Entry | Defect | Reproduction |
+|---|---|---|
+| D-002 | Spec §8.3 types `lastUpdated` as a Unix number; the SDK types it as an ISO 8601 string. Nothing at the pinned SHA reconciles them (F-050) | `specs/x402-specification-v2.md` §8.3 vs `extensions/src/bazaar/facilitatorClient.ts` L108 |
+| D-009 | Reference catalog keys MCP resources on URL alone, violating the spec's (`url`, `toolName`) MUST (F-029) — two tools on one server overwrite each other | `e2e/facilitators/typescript/bazaar.ts` L17 |
+| D-019 | Mock facilitator omits `batch-settlement` from `evmSchemes`, breaking its own claim-everything contract and killing every TS server under a non-EVM facilitator (F-068a) | `e2e/mock-facilitator/index.ts` L28 |
+| D-020 | `servers/fastify` never reads `MOCK_FACILITATOR_URL`, so it cannot start against any single-family facilitator (F-068b) | `grep MOCK_FACILITATOR_URL e2e/servers/*/index.ts` |
+
+All four have been marked for upstream reporting since 2026-08-02. **None was ever filed.** Zero
+issues, zero pull requests, zero contact with the maintainers. "UPSTREAM" was a plan that read, at
+a glance, like an outcome — and three pieces of prose had drifted into asserting the outcome
+outright: the litepaper's "queued for an upstream report" and "recorded and queued upstream"
+implied a queue that does not exist, and `docs/scf/maintenance.md` stated flatly that "upstream
+divergences are reported, not papered over". That last one was the most misleading sentence in the
+submission set: it made an unfiled backlog sound like a track record. All three are corrected.
+
+Why unfiled: opening issues posts publicly under the maintainer's personal GitHub identity, in
+their name, on a third-party repository. That is not an action to take unattended on someone's
+behalf, and no attended session has done it. The blocker is authorization, not evidence — the
+reproductions have been ready for twelve days.
+
+**Decision:** stop describing these as upstream-reported. Concretely:
+1. All four statuses become **FOUND, NOT FILED**, pointing here.
+2. Litepaper and maintenance wording drops "queued upstream" and "are reported" for "found,
+   documented with a reproduction, not filed".
+3. The claim available to the submission is the accurate one: *walras diverges from the spec and
+   the reference implementation in four places, each traced to a specific line, with the correct
+   behavior implemented and evidenced here.* The RFP values interop bug reports (§4) — that
+   value is earned by filing, and this entry is the standing reminder that it has not been.
+4. Closing this needs one attended session with the maintainer present: four issues from the
+   table above. Nothing else is outstanding.
+
+**Anti-goal:** do not file them from an assistant session or any identity that is not the
+maintainer's own considered choice. An unfiled finding honestly labeled beats a filed one nobody
+authorized.
+
+---
+
+## D-037 — Policywright is served as a paid MCP tool via the STOCK server gate; the reusable artifact is a reference integration, and it lives in Policywright's repo.
+**Status:** ADOPTED · 2026-08-14 · Evidence: F-093, F-094; F-080, F-082, F-083; EVIDENCE §S6-4
+
+The S6 acceptance case — a real production tool, paid by an agent with zero prior
+integration, cataloged by its first payment — is proven with **Policywright** (SCF #44).
+Four decisions shaped how:
+
+1. **No walras-authored payment gate.** Q-019 asked whether an official server-side gate
+   exists; it does — `@x402/mcp` `createPaymentWrapper` verifies → executes → settles and
+   withholds tool content on settle failure per the transport spec (F-080). The
+   session-prompt fallback ("if none exists, implement the minimal spec-conformant gate as
+   a walras helper, flag it upstream") therefore did **not** fire. Building a redundant gate
+   would have been a worse, unproven copy of a maintained one. What we contribute instead is
+   a **reference integration** — a worked example of wiring an existing tool as a paid,
+   discoverable MCP tool end to end — which is the honest "our lane" candidate for an
+   upstream contribution, not a race with anyone's gating PR.
+
+2. **Provenance: the integration lives in the Policywright repo** (branch
+   `walras-x402-integration`, `integrations/walras-x402`), per G6.2. walras imports nothing
+   from Policywright; Policywright's server imports only the stock x402 SDK plus its own pure
+   modules (`parseRecordedJson` → `synthesize` → `emit`). It is **one tool**, not
+   Policywright's Tranche-2 "MCP server" deliverable (record/synthesize/simulate/verify +
+   Claude skill + wallet), whose tracker rows stay "Not started" on `main`. Calling this that
+   deliverable would be the exact overstatement the project screens for.
+
+3. **A separate demo script, not folded into `scripts/demo.sh`.** The Policywright case
+   depends on an external repo checkout being present; the primary `demo.sh` is self-contained
+   within walras and must stay runnable from a clean walras clone. So the acceptance case is
+   `scripts/policywright-demo.sh` (+ `policywright-negative.sh`), which name their external
+   dependency explicitly and fail with instructions if it is absent. `gate-s6.sh` runs the
+   Policywright demo when the checkout is present and otherwise records the two settled hashes
+   from EVIDENCE §S6-4 as the standing proof — it never silently passes on a skipped live run.
+
+4. **The MCP negative path is additive.** The catalog's ownership binding (D-024) was proven
+   on HTTP URLs in S3; `poison-mcp` (a new `hostile-client.ts` mode) proves it on the
+   `(url, toolName)` MCP tuple too (F-094). Most testing-demo negative flags (`--tampered`,
+   `--expired`, replay) attack `/verify` or `/settle` directly and are **not reachable through
+   `paid_call`**, which constructs consistent, freshly-signed payloads by design — that
+   unreachability is itself the correct behavior and is stated plainly in EVIDENCE §S6-4
+   rather than papered over with a synthetic path.
+
+Also new and generic (walras-side, Apache-2.0, reusable beyond this integration):
+`scripts/testnet-usdc.mjs` funds a testnet account with USDC off the DEX (path-payment to
+self), removing the captcha-gated Circle faucet from the automated demo loop.

@@ -9,6 +9,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
     "seller": "tsx seller.ts",
     "buyer": "tsx buyer.ts",
     "seed": "tsx seed-catalog.ts",

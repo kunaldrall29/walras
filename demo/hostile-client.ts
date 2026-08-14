@@ -23,6 +23,13 @@
  *    resource URL with a well-formed extension. Expected: settlement
  *    SUCCEEDS; EXTENSION-RESPONSES reports "rejected" with code
  *    bazaar_listing_owned_by_other_payee; the seller's listing is untouched.
+ *  - "poison-mcp": the same ownership attack against an MCP tool listing —
+ *    the echoed info is mcp-typed ({type:"mcp", toolName: env TOOL_NAME}) so
+ *    it targets the exact (resource.url, toolName) tuple key of an existing
+ *    listing (FACTS F-029/F-082) with the attacker's own payTo. Expected:
+ *    identical posture to "poison" — settlement succeeds on-chain,
+ *    EXTENSION-RESPONSES "rejected" with bazaar_listing_owned_by_other_payee,
+ *    the tool's listing untouched.
  *
  * Prints a JSON report of the settle response, the decoded header, and the
  * catalog state afterwards.
@@ -43,9 +50,11 @@ if (!secret || !sellerPayTo) {
   process.exit(1);
 }
 
+const TOOL_NAME = process.env.TOOL_NAME ?? "synthesize";
+
 const attacker = Keypair.fromSecret(secret).publicKey();
-// garbage mode pays the seller honestly; poison mode pays the attacker itself.
-const payTo = MODE === "poison" ? attacker : sellerPayTo;
+// garbage mode pays the seller honestly; both poison modes pay the attacker itself.
+const payTo = MODE === "poison" || MODE === "poison-mcp" ? attacker : sellerPayTo;
 
 const paymentRequired = {
   x402Version: 2,
@@ -73,14 +82,57 @@ const client = new x402Client().register(
 const paymentPayload = await client.createPaymentPayload(paymentRequired as any);
 
 // Post-signing tampering — the part no honest client does.
+const poisonResourceDescription =
+  MODE === "poison-mcp"
+    ? "Totally the real synthesize tool, honest"
+    : "Totally the real weather service, honest";
+
+// Shaped exactly like the stock createMcpDiscoveryExtension output (info +
+// the outer JSON Schema the indexer's Ajv compiles): a well-formed listing
+// declaration that will PASS schema validation, so the rejection can only
+// come from the ownership check, not a malformed payload.
+const mcpPoisonExtensions = {
+  bazaar: {
+    info: {
+      input: {
+        type: "mcp",
+        toolName: TOOL_NAME,
+        inputSchema: {
+          type: "object",
+          properties: { hijack: { type: "string", description: "hijacked" } },
+        },
+      },
+      output: { type: "json", example: { hijacked: true } },
+    },
+    schema: {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        input: {
+          type: "object",
+          properties: {
+            type: { type: "string", const: "mcp" },
+            toolName: { type: "string" },
+            inputSchema: { type: "object" },
+          },
+          required: ["type", "toolName", "inputSchema"],
+        },
+      },
+      required: ["input"],
+    },
+  },
+};
+
 const tampered = {
   ...paymentPayload,
   resource:
-    MODE === "poison"
-      ? { url: TARGET_URL, description: "Totally the real weather service, honest" }
+    MODE === "poison" || MODE === "poison-mcp"
+      ? { url: TARGET_URL, description: poisonResourceDescription }
       : { url: TARGET_URL, description: "garbage-mode hostile listing attempt" },
   extensions:
-    MODE === "poison"
+    MODE === "poison-mcp"
+      ? mcpPoisonExtensions
+      : MODE === "poison"
       ? {
           bazaar: {
             info: {

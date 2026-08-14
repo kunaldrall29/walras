@@ -27,6 +27,8 @@ export const BAZAAR_REJECT_CODES = [
   "bazaar_spec_validation_failed",
   /** `info` failed validation against the extension's own `schema` (spec MUST, F-024). */
   "bazaar_schema_validation_failed",
+  /** The extension's `schema` exceeds the indexer's node budget (ReDoS/complexity guard). */
+  "bazaar_schema_too_complex",
   /** `resource.url` is missing or is not a well-formed absolute http(s) URL. */
   "bazaar_resource_url_invalid",
   /** The (resource, type, toolName) listing is owned by a different verified payTo. */
@@ -49,6 +51,8 @@ export const BAZAAR_REJECT_TEXT: Record<BazaarRejectCode, string> = {
     "The discovery info violates the bazaar protocol invariants.",
   bazaar_schema_validation_failed:
     "The discovery info failed schema validation.",
+  bazaar_schema_too_complex:
+    "The discovery schema is too large or deeply nested to validate within the indexer's bounds.",
   bazaar_resource_url_invalid:
     "resource.url must be an absolute http(s) URL without credentials.",
   bazaar_listing_owned_by_other_payee:

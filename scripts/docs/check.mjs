@@ -166,8 +166,16 @@ const ROOT_DOCS = ["README.md", "SECURITY.md", "CONTRIBUTING.md"]
   .filter(existsSync);
 const ALL_DOCS = [...markdownFilesUnder(resolve(REPO_ROOT, "docs")), ...ROOT_DOCS];
 
-/** Verbatim external capture — exempt from every authored-content rule. */
-const VERBATIM = new Set([resolve(REPO_ROOT, "docs", "rfp.md")]);
+/**
+ * Verbatim documents — exempt from every authored-content rule. rfp.md is an
+ * external capture; walras-technical-architecture.md is the grant document of
+ * record, rendered and republished verbatim (its [BUILT]/[T1]/[T2]/[T3]
+ * tranche markers are its own evidence discipline, in place of EVIDENCE refs).
+ */
+const VERBATIM = new Set([
+  resolve(REPO_ROOT, "docs", "rfp.md"),
+  resolve(REPO_ROOT, "docs", "walras-technical-architecture.md"),
+]);
 /** The evidence ledgers themselves — capability claims here ARE the evidence. */
 const LEDGERS = new Set(
   ["FACTS.md", "EVIDENCE.md", "DECISIONS.md"].map(name => resolve(REPO_ROOT, "docs", name)),

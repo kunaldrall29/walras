@@ -16,10 +16,11 @@ Apache-2.0. Built against the pinned spec commit
 | Facilitator — `POST /verify`, `POST /settle`, `GET /supported` | **proven** — stock-client conformance, tx [`ac50c091…cc155`](https://stellar.expert/explorer/testnet/tx/ac50c0910b3484ae6f2b070f35a95d1062dd3269cd4f877434dbcf2d7d3cc155), EVIDENCE S2-2/S2-3 |
 | x402 repo e2e suite against walras (`--families=stellar --testnet`) | **4/4 pass** — EVIDENCE S2-4 |
 | Settle-gated automatic cataloging + `GET /discovery/resources` (seven filters) | **proven** — pay → listed, zero registration; hostile writes soft-dropped with machine reasons; EVIDENCE S3-3/S3-4 |
-| `GET /discovery/search` — BM25 ranking, cursor pagination, truthful `partialResults` | **proven** — recall@5 0.93, MRR@10 0.91 on a 28-query eval; EVIDENCE S4-3/S4-4 |
+| `GET /discovery/search` — BASELINE FTS5/BM25 ranking (D-026), cursor pagination, truthful `partialResults` | **proven** — recall@5 0.93, MRR@10 0.91 on a 28-query eval; EVIDENCE S4-3/S4-4 |
 | One-command demo: search → pay → tx hash → auto-listed, plus three negative paths | **proven** — EVIDENCE S5-2/S5-3 |
 | MCP server — an agent completes discover→pay using **only** `search_resources` + `paid_call` | **proven** — a generic MCP client paid an http listing *and* a live MCP tool (which its own settlement auto-cataloged); EVIDENCE S6-3 |
-| Measured settlement fee | **0.0022973 XLM** (22 973 stroops), uniform across every observed settlement — EVIDENCE S2-3, S5-2, S6-3 |
+| A **real production tool** ([Policywright](https://github.com/kunaldrall29/policywright), SCF #44) paid by an agent with **zero prior integration** | **proven** — its `synthesize` tool, served via the stock `@x402/mcp` gate, was found (empty→pay-to-list), paid (tx [`3ff7309b…bf04`](https://stellar.expert/explorer/testnet/tx/3ff7309bc7641372265c4cbb89ddc314c430585085b1b2ccb0d4dbeea9f6bf04)), cataloged by that payment, re-found and re-paid by id (tx [`980c3c59…8cc4`](https://stellar.expert/explorer/testnet/tx/980c3c5934b0405e501127d04fb246322a28afa8a610cbdfe48dcdd353c48cc4)); a `poison-mcp` hijack of its listing was rejected `bazaar_listing_owned_by_other_payee`; EVIDENCE S6-4 |
+| Measured settlement fee | **0.0022973 XLM** (22 973 stroops) on the single-submitter path (F-069); the fee-bump path charges 23 073 stroops, +100 (F-086) — EVIDENCE S2-3, S5-2, S6-3, S7-1 |
 
 The facilitator wraps [`@x402/stellar`](https://www.npmjs.com/package/@x402/stellar)'s
 `ExactStellarScheme`, which already enforces every MUST in the exact-Stellar scheme spec.
@@ -40,7 +41,7 @@ hour bar.
 minutes cold)
 
 ```bash
-git clone <this-repo> && cd walras
+git clone https://github.com/kunaldrall29/walras && cd walras
 pnpm install
 ```
 

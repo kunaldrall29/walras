@@ -7,21 +7,25 @@
  * is resolved against the repository tree at build time and rewritten to one of:
  * a rendered page, a copied asset (SVGs, .mmd sources, openapi.yaml), or a
  * GitHub URL for source files that are not part of the site — so the site can
- * never ship a link the repository does not back.
+ * never ship a link the repository does not back. In-document ```mermaid
+ * fences render to SVGs at build time via the same mmdc path as
+ * render-diagrams.mjs, falling back to the fenced source when mmdc cannot run.
  *
  * Run: node scripts/docs/build-site.mjs   (requires committed docs — it reads
  * the working tree; the footer stamps the current HEAD commit).
  */
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, posix, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import MarkdownIt from "markdown-it";
@@ -31,10 +35,14 @@ const OUT = join(REPO_ROOT, "dist-site");
 const GITHUB = "https://github.com/kunaldrall29/walras";
 const BRANCH = "session-0-verification";
 const COMMIT = execSync("git rev-parse --short HEAD", { cwd: REPO_ROOT }).toString().trim();
+// Same renderer render-diagrams.mjs uses for the committed SVGs.
+const MMDC = join(REPO_ROOT, "node_modules", ".bin", "mmdc");
+const PUPPETEER_CONFIG = join(REPO_ROOT, "scripts", "docs", "puppeteer-config.json");
 
 /** repo-relative markdown source → site route (root-absolute, .html). */
 const PAGES = new Map([
   ["README.md", "/index.html"],
+  ["docs/walras-technical-architecture.md", "/technical-architecture.html"],
   ["SECURITY.md", "/security.html"],
   ["CONTRIBUTING.md", "/contributing.html"],
   ["docs/quickstart.md", "/quickstart.html"],
@@ -77,6 +85,7 @@ const ASSET_FILES = new Map([
 const NAV = [
   ["Start", [
     ["/index.html", "Overview"],
+    ["/technical-architecture.html", "ARCHITECTURE · MD"],
     ["/quickstart.html", "Quickstart"],
     ["/faq.html", "FAQ"],
     ["/glossary.html", "Glossary"],
@@ -218,6 +227,132 @@ md.renderer.rules.image = (tokens, idx, options, env, self) => {
 };
 
 /**
+ * Renders one in-document mermaid source to an SVG under the site's /diagrams
+ * tree, exactly the way render-diagrams.mjs renders the committed diagrams
+ * (mmdc, headless Chromium per puppeteer-config.json, white background).
+ *
+ * @param source - Mermaid source text from a fenced block.
+ * @param name - Output file name, without extension.
+ * @returns Site-absolute SVG path, or null when rendering fails.
+ */
+function renderMermaidSvg(source, name) {
+  if (!existsSync(MMDC)) return null;
+  const svgOut = join(OUT, "diagrams", `${name}.svg`);
+  mkdirSync(dirname(svgOut), { recursive: true });
+  const tmp = mkdtempSync(join(tmpdir(), "walras-site-mmd-"));
+  const mmdPath = join(tmp, `${name}.mmd`);
+  writeFileSync(mmdPath, source);
+  const result = spawnSync(
+    MMDC,
+    ["-i", mmdPath, "-o", svgOut, "-b", "white", "-p", PUPPETEER_CONFIG, "--quiet"],
+    { encoding: "utf8" },
+  );
+  rmSync(tmp, { recursive: true, force: true });
+  if (result.status !== 0 || !existsSync(svgOut)) {
+    console.error(
+      `build-site: mermaid render failed for ${name} — page falls back to the fenced source`,
+    );
+    if (result.stderr || result.stdout) console.error((result.stderr || result.stdout).trim());
+    return null;
+  }
+  return `/diagrams/${name}.svg`;
+}
+
+// ```mermaid fences render to SVGs at build time and ship as the same
+// tap-to-open figures the committed diagrams use. If rendering fails the page
+// shows the fenced mermaid source in a normal <pre> — never a broken image.
+const renderFence = md.renderer.rules.fence.bind(md.renderer.rules);
+md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  const token = tokens[idx];
+  if (token.info.trim().split(/\s+/)[0] !== "mermaid") {
+    return renderFence(tokens, idx, options, env, self);
+  }
+  env.mermaid = (env.mermaid ?? 0) + 1;
+  const src = renderMermaidSvg(token.content, `${env.pageBase}-mermaid-${env.mermaid}`);
+  if (src === null) {
+    return `<pre class="mermaid-source"><code>${md.utils.escapeHtml(token.content)}</code></pre>\n`;
+  }
+  return `<a class="figure" href="${src}"><img src="${src}" alt="Diagram ${env.mermaid}, rendered from the mermaid source in this document"></a>\n`;
+};
+
+/** The grant document of record — rendered verbatim (see renderPage). */
+const ARCH_SOURCE = "docs/walras-technical-architecture.md";
+
+/**
+ * Build-supplied front matter for pages whose markdown must stay untouched.
+ * The pinned spec commit is confirmed against the docs/FACTS.md header:
+ * x402-foundation/x402 @ 17fc9890ade45a570a019352a3573391ad5d1e1f.
+ */
+const PAGE_META = new Map([
+  [
+    ARCH_SOURCE,
+    {
+      title: "Walras Technical Architecture",
+      line:
+        `Last updated 2026-08-14 · pinned spec commit <code>17fc989</code> · ` +
+        `<a href="https://raw.githubusercontent.com/kunaldrall29/walras/${BRANCH}/${ARCH_SOURCE}">Download .md</a>`,
+    },
+  ],
+]);
+
+/** [BUILT]/[T1]/[T2]/[T3] tranche tokens, with their optional qualifiers. */
+const CHIP_TOKEN = /\[(BUILT|T[1-3])((?::| )[^\]]*)?\]/g;
+
+/**
+ * Replaces tranche tokens in one text token with status-chip spans. The words
+ * inside the brackets are preserved exactly; only the brackets become chip
+ * styling. Applies solely to the technical-architecture page.
+ *
+ * @param token - A "text" token.
+ * @returns Replacement token list.
+ */
+function transformChipText(token) {
+  const Token = token.constructor;
+  const out = [];
+  let last = 0;
+  for (const match of token.content.matchAll(CHIP_TOKEN)) {
+    const before = token.content.slice(last, match.index);
+    if (before) out.push(Object.assign(new Token("text", "", 0), { content: before }));
+    const cls = match[1] === "BUILT" ? "chip chip-built" : "chip";
+    const label = md.utils.escapeHtml(match[1] + (match[2] ?? ""));
+    out.push(
+      Object.assign(new Token("html_inline", "", 0), {
+        content: `<span class="${cls}">${label}</span>`,
+      }),
+    );
+    last = match.index + match[0].length;
+  }
+  if (out.length === 0) return [token];
+  const tail = token.content.slice(last);
+  if (tail) out.push(Object.assign(new Token("text", "", 0), { content: tail }));
+  return out;
+}
+
+/** Page-scoped styles for the technical-architecture page only. */
+const ARCH_STYLE = `
+<style>
+.page-meta{margin:-.35rem 0 1.8rem;font-size:.85rem;color:var(--muted)}
+.chip{display:inline-block;padding:.1em .55em;border:1px solid var(--line);border-radius:999px;background:var(--code-bg);color:var(--muted);font-size:.72em;font-weight:600;line-height:1.6;white-space:nowrap;vertical-align:.1em}
+.chip-built{color:var(--accent);border-color:var(--accent)}
+.hanchor{margin-left:.45rem;font-weight:400;font-size:.85em;text-decoration:none;color:var(--muted);opacity:0}
+h2:hover .hanchor,h3:hover .hanchor,.hanchor:focus{opacity:1}
+@media print{
+  :root{--bg:#fff;--fg:#000;--muted:#333;--line:#999;--accent:#000;--code-bg:#fff;--side:#fff}
+  .sidebar,.topbar{display:none}
+  .layout{display:block}
+  main{max-width:100%;padding:0}
+  body{background:#fff;color:#000}
+  a{color:#000}
+  .hanchor{display:none}
+  a.figure{overflow:visible}
+  a.figure img,img{max-width:100%!important;height:auto;border:none;border-radius:0}
+  pre{overflow-x:visible;white-space:pre-wrap;border:1px solid #ccc}
+  .table-wrap{overflow-x:visible}
+  h1,h2,h3{break-after:avoid}
+}
+</style>`;
+
+/**
  * Renders one markdown source to a full HTML page.
  *
  * @param sourceRel - Repo-relative markdown path.
@@ -226,7 +361,7 @@ md.renderer.rules.image = (tokens, idx, options, env, self) => {
  */
 function renderPage(sourceRel, route) {
   const raw = readFileSync(join(REPO_ROOT, sourceRel), "utf8");
-  const env = {};
+  const env = { pageBase: route.slice(1).replace(/\.html$/, "").split("/").join("-") };
   const tokens = md.parse(raw, env);
 
   let title = "walras";
@@ -255,14 +390,33 @@ function renderPage(sourceRel, route) {
     }
     // Headings keep their document names (the evidence ledger's own title and
     // section ids must survive); body text gets the evidence-word cleanup.
-    if (tokens[i - 1]?.type !== "heading_open") {
+    // The technical-architecture document is exempt — its wording is verbatim
+    // by rule; its only transform is presentational (tranche tokens → chips).
+    if (sourceRel === ARCH_SOURCE) {
+      token.children = (token.children ?? []).flatMap(child =>
+        child.type === "text" ? transformChipText(child) : [child],
+      );
+    } else if (tokens[i - 1]?.type !== "heading_open") {
       token.children = (token.children ?? []).flatMap(child =>
         child.type === "text" ? transformEvidenceText(child) : [child],
       );
     }
   }
 
-  const body = md.renderer.render(tokens, md.options, env);
+  let body = md.renderer.render(tokens, md.options, env);
+  const meta = PAGE_META.get(sourceRel);
+  if (meta) {
+    title = meta.title ?? title;
+    // Build-supplied metadata line directly under the document's own H1.
+    body = body.replace("</h1>", `</h1>\n<p class="page-meta">${meta.line}</p>`);
+    // Hover anchors on every section heading; hrefs reuse the stable slug ids.
+    body = body.replace(
+      /<(h[23]) id="([^"]*)">(.*?)<\/\1>/g,
+      (whole, tag, id, inner) =>
+        `<${tag} id="${id}">${inner}<a class="hanchor" href="#${id}" aria-label="Link to this section">#</a></${tag}>`,
+    );
+  }
+  const extraStyle = sourceRel === ARCH_SOURCE ? ARCH_STYLE : "";
   const nav = NAV.map(
     ([group, items]) =>
       `<div class="nav-group"><div class="nav-title">${group}</div>${items
@@ -329,7 +483,7 @@ footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);font-si
   table{font-size:.84rem}
   pre{font-size:.82rem}
 }
-</style>
+</style>${extraStyle}
 </head>
 <body>
 <header class="topbar">
@@ -343,7 +497,7 @@ footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);font-si
 <nav class="sidebar"><a class="brand" href="/index.html">walras</a>${nav}</nav>
 <main>
 ${body}
-<footer>Generated from <a href="${GITHUB}/tree/${BRANCH}">${BRANCH}</a> @ <code>${COMMIT}</code> · Apache-2.0 · testnet, unaudited — see the <a href="/threat-model.html">threat model</a>.</footer>
+<footer>Generated from <a href="${GITHUB}/tree/${BRANCH}">${BRANCH}</a> @ <code>${COMMIT}</code> · Testnet software. Unaudited. Apache-2.0. See the <a href="/threat-model.html">threat model</a>.</footer>
 </main>
 </div>
 </body>

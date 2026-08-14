@@ -117,8 +117,8 @@ Step by step, with the load-bearing facts:
    signed auth entry rides along), signs, submits, and polls. The receipt is
    `{success, transaction, network, payer}` with the 64-hex on-chain hash (F-038).
 6. Fees: the submitter sponsors the network fee — the buyer needs only the payment asset
-   (F-006). Measured on `stellar:testnet`: 22 973 stroops per settlement, uniform across
-   every observed walras settlement (F-069, EVIDENCE S2-3).
+   (F-006). Measured on `stellar:testnet`: 22 973 stroops per settlement on the
+   single-submitter path (F-069, EVIDENCE S2-3), 23 073 on the fee-bump path (F-086, S7-1).
 
 HTTP status convention: a payment the scheme rejects is a **200** carrying
 `isValid: false` / `success: false` — a successful exchange about an invalid payment,
@@ -192,9 +192,10 @@ The lifecycle, end to end:
 
 ## 5. Throughput design
 
-As built (EVIDENCE S2-3, S5-2): a single submitter account sources every settlement,
-`source_account == fee_account`, and every observed settlement charged 22 973 stroops
-(F-069).
+As built (EVIDENCE S2-3, S5-2): on the single-submitter path one account sources each
+settlement, `source_account == fee_account`, charging 22 973 stroops (F-069). With a
+fee-bump signer configured (EVIDENCE S7-1) `fee_account ≠ source_account` and the charge
+is 23 073 stroops (F-086).
 
 The scale-out path is **configuration, not engineering**, because the package already
 ships it (D-012):

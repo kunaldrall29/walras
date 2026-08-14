@@ -15,6 +15,7 @@
     "test": "pnpm run check:deps && pnpm -r test",
     "check:deps": "node scripts/check-single-stellar-sdk.mjs",
     "check:licenses": "node scripts/license-scan.mjs",
+    "check:site": "bash scripts/check-site.sh",
     "preflight": "node scripts/preflight.mjs",
     "fixtures": "node scripts/build-fixtures.mjs",
     "dev:facilitator": "pnpm --filter @walras/facilitator dev",

@@ -1337,7 +1337,17 @@ and the catalog write was refused:
 
 Catalog after: the seller's listing intact, `description` unchanged, accepts payTo set =
 `{<seller>}` only; `?payTo=<attacker>` returns `total: 0`. **A real, settled payment was
-not sufficient to touch another seller's listing** (D-024).
+not sufficient to overwrite an *already-cataloged* listing owned by a different payTo**
+(D-024).
+
+> **Scope of this claim (added 2026-08-14, D-032).** This exercises only the
+> honest-seller-lists-FIRST ordering. It does **not** show URL-control enforcement: the
+> reverse order — an attacker settling first while echoing a URL it does not control —
+> succeeds and locks the real seller out, because a settled payment carries no proof its
+> `payTo` owns the echoed origin. That attacker-FIRST behavior is pinned by a regression
+> test and disclosed as a known limitation in THREAT-MODEL ("URL squatting") and D-032;
+> it is not defended in the pre-build. The overwrite-prevention property above is real,
+> but it protects the second claimant only.
 
 ### On-chain verification and accounting
 
@@ -1638,7 +1648,7 @@ merely printing the two timestamps.
 |---|---|
 | Stock-client conformance transcript + tx hash | S2-2, S2-3 — tx `ac50c091…cc155`, Horizon + stellar.expert verified |
 | x402 repo e2e suite against walras | S2-4 — 4/4 pass (express, hono × fetch, axios), 11 settlements |
-| Measured settlement fee | S0-4 (baseline 23 073), S2-3 + S5-2 (walras: **22 973 stroops = 0.0022973 XLM**, uniform across all 17 observed settlements) |
+| Measured settlement fee | S0-4 (baseline 23 073), S2-3 + S5-2 (walras single-submitter: **22 973 stroops = 0.0022973 XLM** across the S2 settlements, F-069), S7-1 (walras fee-bump: **23 073 stroops**, +100, F-086) |
 | Baseline-vs-walras transcript diff | S2-5 — byte-level diff summary against the x402.org capture |
 | License scan (G-LIC) | S0-5, re-run S3-1, **final re-run S5-1: PASS, zero copyleft** |
 | Search eval table | S4-3, independently reproduced in a clean clone (S5-1): R@1 0.84, R@3/5 0.93, MRR@10 0.91, nDCG@10 0.91, 0 zero-result |
@@ -1848,6 +1858,95 @@ in both directions across both resource types with no registration call anywhere
 
 ---
 
+## S6-4 — A real production tool (Policywright) paid by a zero-integration agent, live on `stellar:testnet` (2026-08-14)
+
+The S6 acceptance case, end to end with a tool that is not ours. **Policywright**
+(SCF #44 — record-to-policy for Soroban smart accounts) exposes a pure `synthesize`
+capability: it turns a recorded Soroban transaction into a least-privilege
+OpenZeppelin smart-account authorization (a context rule scoped to the observed
+calls + spending/frequency policies), with no I/O, no network, and no clock reads —
+so a paid call is deterministic. It is served as a **paid MCP tool** behind walras
+using only the stock x402 SDK: `createPaymentWrapper` from `@x402/mcp` (verify →
+execute → settle, F-080), `x402ResourceServer` + `HTTPFacilitatorClient` from
+`@x402/core` pointed at walras, `ExactStellarScheme`, and
+`declareDiscoveryExtension({toolName:"synthesize", inputSchema, …})`. This closes
+**Q-019**: an official server-side gate exists, so no walras-authored gate was
+written (D-037).
+
+**Provenance (G6.2).** The integration lives in the **Policywright repo**, branch
+`walras-x402-integration`, directory `integrations/walras-x402` (a `server.ts` that
+wraps `parseRecordedJson → synthesize → emit`, a `setup-payto.mjs`, a README). walras
+imports nothing from Policywright. It is one early tool, not Policywright's Tranche-2
+"MCP server" deliverable, which remains not-started on `main`.
+
+**Setup.** Price $0.05 testnet USDC; `payTo` a **fresh Policywright-owned** testnet
+account `GCC5HEDS5CVP2PEKG5ZI3R6UJAKAAEMCDTCADCRFCL6PRFLDEQDBLTOM` (Friendbot-funded,
+USDC trustline via `integrations/walras-x402/setup-payto.mjs`); facilitator = walras
+on a **fresh, empty catalog** (`data/policywright-demo-catalog.db`). The buyer agent
+was USDC-funded off the testnet DEX (`scripts/testnet-usdc.mjs`), not the captcha
+faucet.
+
+**The run** (`scripts/policywright-demo.sh` → `demo/policywright-session.ts`, a generic
+MCP client with zero walras / zero `@x402/*` / zero Policywright imports; it spawns the
+walras MCP server over stdio and drives everything from `tools/list` + returned JSON):
+
+| step | call | outcome |
+|---|---|---|
+| 1 | `tools/list` | exactly `search_resources` + `paid_call` |
+| 2 | `search_resources "least-privilege authorization for a smart account from a Soroban transaction"` `{type:mcp}` | **count 0** — the tool is not listed; the catalog is settle-gated (pay-to-list, D-004) |
+| 3 | `paid_call {url, toolName:"synthesize", input:{recordedTx}}` | **paid**, tx `3ff7309b…bf04`; result = a synthesized spec, rule `pw:swap+harvest`, scope `swap_exact_tokens_for_tokens + harvest` (exactly the two calls the agent performed) |
+| 4 | `search_resources` (same query) | **count 1** — the tool now appears (type `mcp`, `resource` = the tool's real streamable-HTTP endpoint), **cataloged by step 3's settlement alone** |
+| 5 | `paid_call {resourceId, input:{recordedTx}}` | **paid** again by minted id, tx `980c3c59…8cc4`; spec **byte-identical** to step 3 (deterministic tool) |
+| 6 | Horizon | both txs `successful=true`, ledgers 4140963 / 4140965, **fee 22 973 stroops each = F-069** |
+
+```
+POLICYWRIGHT-SESSION-REPORT {"query":"least-privilege authorization for a smart account from a Soroban transaction",
+ "tool":"synthesize",
+ "firstPaid":"3ff7309bc7641372265c4cbb89ddc314c430585085b1b2ccb0d4dbeea9f6bf04",
+ "secondPaidById":"980c3c5934b0405e501127d04fb246322a28afa8a610cbdfe48dcdd353c48cc4",
+ "catalogedByFirstPayment":true,
+ "horizon":[{"hash":"3ff7309b…bf04","ledger":4140963,"feeStroops":"22973"},
+            {"hash":"980c3c59…8cc4","ledger":4140965,"feeStroops":"22973"}],
+ "failures":0}
+policywright-session: PASS — a real production MCP tool, discovered and paid by an
+agent with zero prior integration, cataloged by its own first payment.
+```
+
+Ledger links: <https://stellar.expert/explorer/testnet/tx/3ff7309bc7641372265c4cbb89ddc314c430585085b1b2ccb0d4dbeea9f6bf04>
+· <https://stellar.expert/explorer/testnet/tx/980c3c5934b0405e501127d04fb246322a28afa8a610cbdfe48dcdd353c48cc4>
+
+**Negative path — the auto-cataloging cannot be hijacked** (`scripts/policywright-negative.sh`
+→ `demo/hostile-client.ts` `HOSTILE_MODE=poison-mcp`). After an honest first payment
+catalogs the tool under its real `payTo`, an attacker settles a **real self-payment**
+(structurally valid, on-chain) while echoing the tool's exact `(resource.url, toolName)`
+tuple with the attacker's own `payTo` and a **well-formed** mcp extension (it passes
+schema validation, so the only possible rejection is the ownership check):
+
+```
+NEGATIVE-OK  settle succeeded on-chain; listing rejected: bazaar_listing_owned_by_other_payee
+             reason: This resource is already cataloged for a different payment recipient;
+                     a listing can only be updated by payments to its original payTo.
+             catalog still owned by GCC5HEDS…BLTOM
+```
+
+Settlement succeeds; `EXTENSION-RESPONSES` reports `bazaar.status:"rejected"`,
+`code:bazaar_listing_owned_by_other_payee`; the catalog entry is byte-identical and
+still owned by Policywright (F-094). This is D-024's binding proven on the MCP tuple, not
+just HTTP URLs.
+
+**Which testing-demo negative flags reach the MCP path — stated plainly, not padded.**
+`--poison-catalog` is the one with a direct MCP analog (`poison-mcp`, above). The others
+attack the facilitator's `/verify` or `/settle` with a hand-mutated payload:
+`--tampered` (requirements claim double the signed amount → `invalid_exact_stellar_payload_wrong_amount`)
+and `--expired` (a stale auth entry re-simulated → `…_simulation_failed`) are not reachable
+through `paid_call`, which by construction builds a consistent, freshly-signed payload for
+every call; replay is a protocol property (the Soroban nonce is consumed at first settle),
+so a fresh `paid_call` can never replay. Their live evidence stands where it was captured
+(S2-6, S3-4, S5-3); reproducing them "through MCP" would require a hostile raw client, not
+the agent surface — so they are documented here, not faked.
+
+---
+
 ## Docs — documentation suite session (2026-08-05)
 
 ### Gates
@@ -1992,9 +2091,160 @@ live multi-submitter run.
 
 ---
 
+## S0-7 — The second baseline, captured 12 days late: `periplo-testnet.fly.dev` (2026-08-14)
+
+Session 0's DoD named **two** baseline facilitators to capture. Only one (x402.org,
+S0-2) was ever captured; the second was never probed, and — the actual process
+failure — **no row anywhere recorded that it was outstanding**. It was not deferred,
+refuted, or blocked; it was silently dropped. D-034 records that honestly. This
+section closes it. Everything below is a live capture, not a re-reading of notes.
+
+All probes below were run between 15:46 and 15:49 UTC on 2026-08-14; the `/supported`
+and service-index bodies are from a single capture at 15:48:42Z.
+
+```
+$ curl -s https://periplo-testnet.fly.dev/supported
+HTTP 200
+{
+  "kinds": [
+    { "x402Version": 2, "scheme": "exact", "network": "stellar:testnet",
+      "extra": { "areFeesSponsored": true } }
+  ],
+  "extensions": [ "bazaar" ],
+  "signers": { "stellar:*": [ "GDXULEKCDTYLN2RD7ID7ZTVUJVIDYPJTL7OY7DFN7Z5S4XKFFN6FOFLE" ] }
+}
+
+$ curl -s https://periplo-testnet.fly.dev/
+HTTP 200
+{
+  "service": "periplo-facilitator",
+  "description": "x402 facilitator for Stellar — verify/settle/supported for the exact scheme.",
+  "endpoints": { "health": "/health", "supported": "/supported",
+                 "verify": "POST /verify", "settle": "POST /settle" },
+  "repository": "https://github.com/Eras256/Periplo"
+}
+
+$ curl -s https://periplo-testnet.fly.dev/health
+HTTP 200   {"status":"ok"}
+```
+
+**Finding 1 — the Stellar kind is byte-identical to x402.org's.** Field for field:
+
+```
+x402.org   {"x402Version":2,"scheme":"exact","network":"stellar:testnet","extra":{"areFeesSponsored":true}}
+periplo    {"x402Version":2,"scheme":"exact","network":"stellar:testnet","extra":{"areFeesSponsored":true}}
+```
+
+F-041 (`extra.areFeesSponsored: true` on `stellar:testnet`) is now confirmed on **two
+independent operators**, not one. Neither advertises a `stellar:pubnet` kind. periplo
+advertises a single Stellar signer against x402.org's two (S0-2) — consistent with the
+package's round-robin selector being optional, not required.
+
+**Finding 2 — periplo advertises `bazaar` and serves no discovery endpoint.**
+The canonical bazaar endpoints are `/discovery/resources` (F-025) and
+`/discovery/search` (F-026). Both 404, as does every near-miss spelling probed:
+
+```
+GET /discovery/resources          -> 404      GET /discovery            -> 404
+GET /discovery/search             -> 404      GET /resources            -> 404
+GET /discovery/resources?limit=5  -> 404      GET /search               -> 404
+GET /discovery/search?query=test  -> 404      GET /bazaar/resources     -> 404
+```
+
+This is not a routing artifact of the probe. Routing is demonstrably live on the same
+host — `POST /verify` with an empty body returns a **400**, not a 404, carrying a
+well-formed rejection envelope:
+
+```
+$ curl -s -X POST -H 'content-type: application/json' -d '{}' https://periplo-testnet.fly.dev/verify
+HTTP 400
+{"isValid":false,"invalidReason":"invalid_request_shape","invalidMessage":"[{\"expected\":\"number\", …
+```
+
+And the operator's own service index (above) lists exactly four endpoints —
+`/health`, `/supported`, `/verify`, `/settle`. **No discovery surface is claimed by the
+operator itself**, while `/supported.extensions` claims `bazaar`. The gap is
+self-evident from two of the facilitator's own responses; it needs no inference.
+
+**What this is evidence of.** The RFP's "advertised vs reachable support" caution,
+in its sharpest available form. S0-2 evidenced the mild direction (x402.org advertises
+no `bazaar` and serves none — internally consistent). periplo evidences the direction
+that actually breaks clients: **advertised and not reachable**. A stock client that
+trusts `/supported.extensions` to route discovery traffic gets a 404. This is exactly
+the failure D-016 was adopted to prevent on walras's side ("advertise only what is
+reachable"), and it is now a live counterexample rather than a hypothetical. See F-090,
+F-091, and the D-010 amendment.
+
+**What this is not.** No payment was attempted against periplo, so this says nothing
+about its verify/settle conformance, its fee anatomy, or its correctness as a payment
+baseline. The differential payment baseline remains x402.org (D-010). Scope: eleven GETs
+(`/supported`, the service index, `/health`, and the eight paths above, all eight 404)
+plus one malformed `POST /verify` — read-only throughout, no payment, no state touched.
+
+---
+
+## Ops-1 — What commit docs.walras.space is actually serving (2026-08-14)
+
+The site sat outside every gate: `.github/workflows/ci.yml` has no pages or deploy job,
+the repository contains no deploy configuration of any kind (no CNAME, no
+netlify/vercel/wrangler config), and nothing recorded which commit was live. Deployment
+is manual and out-of-band. D-035 records that posture; this section establishes the
+first actual measurement.
+
+The site's only deploy marker is the footer stamp that `scripts/docs/build-site.mjs`
+writes at build time (`git rev-parse --short HEAD`, L33/L346). Fetched live:
+
+```
+$ curl -s https://docs.walras.space/ | grep -o '<footer.*'
+<footer>Generated from <a href=".../tree/session-0-verification">session-0-verification</a>
+ @ <code>ce3d9ca</code> · Apache-2.0 · testnet, unaudited — …</footer>
+```
+
+Compared against the branch:
+
+```
+$ git rev-parse --short HEAD          c302fac
+$ git rev-parse --short HEAD~1        ce3d9ca      <- what is deployed
+$ git merge-base --is-ancestor ce3d9ca HEAD  ->  YES (deployed is an ancestor, not a fork)
+
+$ git diff --stat ce3d9ca HEAD
+ README.md                   |   2 +-
+ scripts/docs/build-site.mjs | 136 ++++++++++++++++++++++++++++++++++++++------
+ 2 files changed, 119 insertions(+), 19 deletions(-)
+```
+
+**Result: the live site is exactly one commit stale**, and the undeployed commit
+(c302fac) is the one that rewrote the site builder itself — so docs.walras.space is
+currently rendered by the *previous* generation of `build-site.mjs` and does not carry
+the mobile-responsive layout that commit added. The deployed commit is a clean ancestor
+of HEAD, so this is a missed redeploy, not divergence.
+
+`scripts/check-site.sh` now makes this checkable on demand: it fetches the footer,
+extracts the stamped commit, and compares it to a target (default `HEAD`), exiting
+non-zero on mismatch and printing the intervening commits. Run against the current
+tree it fails, correctly:
+
+```
+$ ./scripts/check-site.sh
+check-site: deployed ce3d9ca / expected c302fac
+check-site: FAIL — docs.walras.space is 1 commit behind session-0-verification
+  c302fac feat(site): mobile-responsive docs site + presentation cleanup
+```
+
+It is deliberately **not** wired into `ci.yml`: it requires network and would make CI
+fail on an unrelated ops lag. It is an ops check, run by a human before or after a
+deploy — the gates stay offline and deterministic (D-035).
+
+---
+
 ## Not yet captured
 
 | Section | Blocked on |
 |---|---|
 | ~~**Fee-bump settlement by walras**~~ | **CAPTURED in S7-1** (2026-08-05): five settlements through the fee-bump path, agent tx `7519b950…9875` verified on Horizon — `fee_account ≠ source_account`, fee 23 073 = baseline anatomy (F-054) and the D-021 delta exactly. |
 | ~~**MCP tool cataloged from a live MCP seller**~~ | **CAPTURED in S6-3** (2026-08-05): `demo/mcp-seller.ts` settled through walras and was auto-cataloged under the (url, toolName) tuple, then re-discovered and re-paid by id in the same MCP session. |
+| ~~**A REAL production tool paid by a zero-integration agent**~~ | **CAPTURED in S6-4** (2026-08-14): Policywright's `synthesize` (SCF #44), served via the stock `@x402/mcp` gate from the Policywright repo, was found (empty→pay-to-list), paid (tx `3ff7309b…`), cataloged by that payment, then re-found and re-paid by id (tx `980c3c59…`); poison-mcp hijack rejected `bazaar_listing_owned_by_other_payee`. |
+| ~~**Second baseline facilitator (S0 DoD)**~~ | **CAPTURED in S0-7** (2026-08-14), 12 days late. Recorded here rather than quietly closed: between 2026-08-02 and 2026-08-14 this was neither captured nor tracked as outstanding anywhere in FACTS, DECISIONS, or this table (D-034). |
+| **docs.walras.space is one commit behind** | Not blocked — **measured in Ops-1** (2026-08-14): deployed `ce3d9ca`, HEAD `c302fac`. Closing it is a human redeploy; nothing in this repository can perform or trigger it (no deploy config, no CI job). `scripts/check-site.sh` detects the drift; it does not fix it. |
+| **Upstream reports for D-009 / D-019 / D-020** | **FOUND, NOT FILED** (D-036). Three defects with reproductions; zero issues opened. Filing posts under a personal GitHub identity, so it was not done unattended. Not blocked on evidence — blocked on a human pressing submit. |
+| **Multi-submitter round-robin settlement** | Configuration shipped and unit-tested; never observed live. S7-1 ran one submitter plus the fee account (F-086). Needs a second funded submitter seed. |

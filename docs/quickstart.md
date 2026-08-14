@@ -17,7 +17,7 @@ F-058), pnpm 10 (`corepack enable` gets you pnpm), git, curl.
 Measured at 5 s on a warm pnpm store; expect a couple of minutes cold (EVIDENCE S5-5).
 
 ```bash
-git clone <this-repo> && cd walras
+git clone https://github.com/kunaldrall29/walras && cd walras
 pnpm install
 ```
 
@@ -100,7 +100,7 @@ Each demo phase maps to one architectural fact:
    (F-027); the agent builds its request entirely from the listing's calling
    convention and pays the top hit through the stock client. The network fee is
    sponsored by the facilitator's submitter (F-006), at 22 973 stroops per
-   settlement on every observed walras settlement (F-069).
+   settlement on the single-submitter path (F-069), 23 073 on the fee-bump path (F-086).
 5. **The catalog entry's `lastUpdated` is bumped** by that settlement — an
    ISO 8601 string, the shape the stock SDK type declares (D-002).
 

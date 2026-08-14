@@ -26,11 +26,17 @@ export {
   type ListParams,
   type SearchPage,
   type SearchParams,
+  type SoftDrop,
   type UpsertInput,
   type UpsertResult,
 } from "./store.js";
 
-export { indexSettledPayment, MAX_EXTENSIONS_BYTES, type IndexOutcome } from "./indexer.js";
+export {
+  indexSettledPayment,
+  MAX_EXTENSIONS_BYTES,
+  MAX_SCHEMA_NODES,
+  type IndexOutcome,
+} from "./indexer.js";
 
 export {
   encodeExtensionResponses,

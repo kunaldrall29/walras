@@ -71,8 +71,9 @@ planned before any mainnet production tag (THREAT-MODEL §4).
 
 The buyer pays the resource's price and nothing else — no network fee, no
 sequence number, because the submitter sponsors the fee (F-006). The operator's
-cost is measured at 22 973 stroops = 0.0022973 XLM per settlement, uniform
-across every observed walras settlement (F-069).
+cost is measured at 22 973 stroops = 0.0022973 XLM per settlement on the
+single-submitter path (F-069); the fee-bump path costs 100 stroops more,
+23 073 (F-086).
 
 ### Why did the facilitator refuse to start?
 

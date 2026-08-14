@@ -63,6 +63,14 @@ export interface CatalogListing {
 }
 
 /** Input for a settle-gated upsert. */
+/** One field the indexer validated away, for the `soft_drops` audit log. */
+export interface SoftDrop {
+  /** The listing field that was dropped, e.g. "routeTemplate", "tags". */
+  field: string;
+  /** Machine-readable reason the field was dropped. */
+  reasonCode: string;
+}
+
 export interface UpsertInput {
   resource: string;
   type: "http" | "mcp";
@@ -79,6 +87,8 @@ export interface UpsertInput {
   requirements: PaymentRequirements;
   /** ISO 8601 timestamp for this settlement. */
   settledAt: string;
+  /** Per-field soft-drops to record in the audit log (RFP task 3.A). */
+  softDrops?: SoftDrop[];
 }
 
 /** Result of an upsert attempt. */
@@ -207,6 +217,15 @@ CREATE TABLE IF NOT EXISTS extension_keys (
 );
 CREATE INDEX IF NOT EXISTS idx_extension_keys_resource ON extension_keys(resource_id);
 
+CREATE TABLE IF NOT EXISTS soft_drops (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  listing_key  TEXT NOT NULL,
+  field        TEXT NOT NULL,
+  reason_code  TEXT NOT NULL,
+  at           TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_soft_drops_listing ON soft_drops(listing_key);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(name, description, params, tags);
 `;
 
@@ -332,16 +351,47 @@ export class BazaarStore {
     try {
       const existing = this.db
         .prepare(
-          "SELECT id, owner_pay_to FROM resources WHERE resource = ? AND type = ? AND tool_name = ?",
+          `SELECT id, owner_pay_to, description, mime_type, service_name,
+                  tags_json, icon_url, extensions_json
+             FROM resources WHERE resource = ? AND type = ? AND tool_name = ?`,
         )
         .get(input.resource, input.type, input.toolName) as
-        | { id: number | bigint; owner_pay_to: string }
+        | {
+            id: number | bigint;
+            owner_pay_to: string;
+            description: string | null;
+            mime_type: string | null;
+            service_name: string | null;
+            tags_json: string | null;
+            icon_url: string | null;
+            extensions_json: string | null;
+          }
         | undefined;
 
       if (existing !== undefined && existing.owner_pay_to !== input.payTo) {
         this.db.exec("ROLLBACK");
         return { outcome: "ownership_conflict", ownerPayTo: existing.owner_pay_to };
       }
+
+      // Metadata merge (DECISIONS D-024): a same-owner resettle refreshes only
+      // the fields the new payload actually carries; a field the payload omits
+      // keeps its prior value. This closes a same-owner poisoning vector — a
+      // hostile buyer echoing a stripped-down bazaar extension to a seller's
+      // own listing must not be able to BLANK that seller's description /
+      // serviceName / tags / iconUrl. `?? existing` never fabricates data;
+      // absence means "leave as-is", not "clear".
+      const mergedDescription = input.description ?? existing?.description ?? undefined;
+      const mergedMimeType = input.mimeType ?? existing?.mime_type ?? undefined;
+      const mergedServiceName = input.serviceName ?? existing?.service_name ?? undefined;
+      const mergedTags =
+        input.tags ??
+        (existing?.tags_json != null ? (JSON.parse(existing.tags_json) as string[]) : undefined);
+      const mergedIconUrl = input.iconUrl ?? existing?.icon_url ?? undefined;
+      const mergedExtensions =
+        input.extensions ??
+        (existing?.extensions_json != null
+          ? (JSON.parse(existing.extensions_json) as Record<string, unknown>)
+          : undefined);
 
       let resourceId: number | bigint;
       if (existing === undefined) {
@@ -359,21 +409,18 @@ export class BazaarStore {
             input.toolName,
             input.payTo,
             input.x402Version,
-            input.description ?? null,
-            input.mimeType ?? null,
-            input.serviceName ?? null,
-            input.tags === undefined ? null : JSON.stringify(input.tags),
-            input.iconUrl ?? null,
-            input.extensions === undefined ? null : JSON.stringify(input.extensions),
+            mergedDescription ?? null,
+            mergedMimeType ?? null,
+            mergedServiceName ?? null,
+            mergedTags === undefined ? null : JSON.stringify(mergedTags),
+            mergedIconUrl ?? null,
+            mergedExtensions === undefined ? null : JSON.stringify(mergedExtensions),
             input.settledAt,
             input.settledAt,
           );
         resourceId = inserted.lastInsertRowid;
       } else {
         resourceId = existing.id;
-        // Refresh with the latest settlement's view of the resource. The most
-        // recent payment a seller demonstrably accepted is the freshest truth
-        // about their listing; stale metadata is not preserved.
         this.db
           .prepare(
             `UPDATE resources SET
@@ -384,12 +431,12 @@ export class BazaarStore {
           )
           .run(
             input.x402Version,
-            input.description ?? null,
-            input.mimeType ?? null,
-            input.serviceName ?? null,
-            input.tags === undefined ? null : JSON.stringify(input.tags),
-            input.iconUrl ?? null,
-            input.extensions === undefined ? null : JSON.stringify(input.extensions),
+            mergedDescription ?? null,
+            mergedMimeType ?? null,
+            mergedServiceName ?? null,
+            mergedTags === undefined ? null : JSON.stringify(mergedTags),
+            mergedIconUrl ?? null,
+            mergedExtensions === undefined ? null : JSON.stringify(mergedExtensions),
             input.settledAt,
             resourceId,
           );
@@ -423,13 +470,14 @@ export class BazaarStore {
       const insertKey = this.db
         .prepare("INSERT OR IGNORE INTO extension_keys (resource_id, key) VALUES (?, ?)")
         ;
-      for (const key of Object.keys(input.extensions ?? {})) {
+      for (const key of Object.keys(mergedExtensions ?? {})) {
         insertKey.run(resourceId, key);
       }
 
       // Search index rides the same transaction as the row it describes:
       // either both commit or neither does, so the FTS view of the catalog
-      // can never drift from the catalog itself.
+      // can never drift from the catalog itself. It indexes the MERGED values,
+      // matching exactly what the resources row now stores.
       this.db.prepare("DELETE FROM search_index WHERE rowid = ?").run(resourceId);
       this.db
         .prepare(
@@ -437,11 +485,23 @@ export class BazaarStore {
         )
         .run(
           resourceId,
-          input.serviceName ?? "",
-          input.description ?? "",
-          extractParamText(input.extensions),
-          input.tags === undefined ? "" : input.tags.join(" "),
+          mergedServiceName ?? "",
+          mergedDescription ?? "",
+          extractParamText(mergedExtensions),
+          mergedTags === undefined ? "" : mergedTags.join(" "),
         );
+
+      // Soft-drop audit log (RFP task 3.A): one row per field the indexer
+      // validated away for this settlement, keyed to the listing.
+      if (input.softDrops !== undefined && input.softDrops.length > 0) {
+        const listingKey = `${input.type}:${input.resource}#${input.toolName}`;
+        const insertDrop = this.db.prepare(
+          "INSERT INTO soft_drops (listing_key, field, reason_code, at) VALUES (?, ?, ?, ?)",
+        );
+        for (const drop of input.softDrops) {
+          insertDrop.run(listingKey, drop.field, drop.reasonCode, input.settledAt);
+        }
+      }
 
       this.db.exec("COMMIT");
       return existing === undefined ? { outcome: "created" } : { outcome: "updated" };
@@ -617,6 +677,34 @@ export class BazaarStore {
       total: number | bigint;
     };
     return Number(row.total);
+  }
+
+  /**
+   * Reads the soft-drop audit rows for a listing key (RFP task 3.A). The key
+   * form matches what `upsertFromSettlement` writes: `${type}:${resource}#${toolName}`.
+   *
+   * @param listingKey - The composite listing key.
+   * @returns The recorded field drops, oldest first.
+   */
+  softDropsFor(listingKey: string): Array<{ field: string; reasonCode: string; at: string }> {
+    return this.db
+      .prepare(
+        "SELECT field, reason_code AS reasonCode, at FROM soft_drops WHERE listing_key = ? ORDER BY id ASC",
+      )
+      .all(listingKey) as Array<{ field: string; reasonCode: string; at: string }>;
+  }
+
+  /**
+   * Builds the soft-drop listing key for a listing, matching the form
+   * `upsertFromSettlement` records under.
+   *
+   * @param resource - Canonical resource URL.
+   * @param type - Listing type.
+   * @param toolName - MCP tool name, or "" for HTTP.
+   * @returns The composite key used in the soft_drops table.
+   */
+  static softDropKey(resource: string, type: string, toolName: string): string {
+    return `${type}:${resource}#${toolName}`;
   }
 
   /**

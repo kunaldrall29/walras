@@ -12,9 +12,12 @@ Drift breaks the build before it degrades behavior: a test greps the installed
 upstream bundle for its reason-code literals, so an upstream rename fails CI
 instead of silently weakening a rejection reason (docs/FACTS.md row F-063).
 
-Upstream divergences are reported, not papered over — four are recorded already:
-a spec/SDK type conflict (D-002), a reference-catalog keying bug (D-009), and two
-end-to-end harness defects (D-019, D-020).
+Upstream divergences are recorded with a reproduction, not papered over — four are
+documented already: a spec/SDK type conflict (D-002), a reference-catalog keying bug
+(D-009), and two end-to-end harness defects (D-019, D-020). To be precise about their
+state: all four are **found and documented, not yet filed** — no issue has been opened
+upstream (D-036). Filing them is a named commitment of the grant period, not a
+completed act.
 
 Through the grant period we commit, as cadence rather than calendar: re-verify
 the fact ledger against each new spec commit we adopt; re-run the x402

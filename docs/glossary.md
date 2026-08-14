@@ -70,8 +70,8 @@ header; section references below are at that SHA).
   the account's minimum balance by one base reserve of 0.5 XLM — invisible on
   testnet, real on pubnet (F-085).
 - **stroop** — the smallest XLM unit: 22 973 stroops = 0.0022973 XLM, the
-  measured walras settlement fee, uniform across every observed settlement
-  (F-069).
+  measured walras settlement fee on the single-submitter path (F-069); the
+  fee-bump path measures 23 073 stroops (F-086).
 - **CAIP-2** — the chain-id convention behind network names: `stellar:testnet`,
   `stellar:pubnet` (custom RPC URL required), `stellar:*` wildcard (F-004).
 - **Friendbot** — the testnet XLM faucet; `scripts/setup-accounts.mjs` funds all

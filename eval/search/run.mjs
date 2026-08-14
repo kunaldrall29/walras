@@ -228,3 +228,43 @@ writeFileSync(
   )}\n`,
 );
 console.log(`written: eval/search/results/${date}.json`);
+
+// ---- regression gate (`--gate`) ---------------------------------------
+//
+// Compares this run's nDCG@10 against the committed baseline.json and fails
+// on a >5% regression. CI runs `pnpm eval:search --gate`; a retriever change
+// that moves the numbers must update baseline.json in the same commit.
+
+if (process.argv.includes("--gate")) {
+  const baselineUrl = new URL("./baseline.json", import.meta.url);
+  let baseline;
+  try {
+    baseline = JSON.parse(readFileSync(baselineUrl, "utf8"));
+  } catch (error) {
+    console.error(`eval gate: cannot read committed baseline at ${baselineUrl.pathname}: ${error}`);
+    process.exit(1);
+  }
+  const floor = baseline.ndcgAt10 * 0.95;
+  const current = aggregates.ndcgAt10;
+  const delta = ((current - baseline.ndcgAt10) / baseline.ndcgAt10) * 100;
+  const corpusChanged = baseline.corpusSha256 !== undefined
+    && baseline.corpusSha256 !== createHash("sha256").update(corpusRaw).digest("hex");
+  if (corpusChanged) {
+    console.error(
+      "eval gate: FAIL — corpus.json differs from the one the committed baseline was measured on. " +
+        "Re-baseline deliberately (update eval/search/baseline.json in the same commit).",
+    );
+    process.exit(1);
+  }
+  if (current < floor) {
+    console.error(
+      `eval gate: FAIL — nDCG@10 ${current.toFixed(4)} is ${Math.abs(delta).toFixed(1)}% below ` +
+        `the committed baseline ${baseline.ndcgAt10.toFixed(4)} (allowed regression: 5%).`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `eval gate: PASS — nDCG@10 ${current.toFixed(4)} vs baseline ${baseline.ndcgAt10.toFixed(4)} ` +
+      `(${delta >= 0 ? "+" : ""}${delta.toFixed(1)}%).`,
+  );
+}

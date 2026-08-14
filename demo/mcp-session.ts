@@ -189,13 +189,14 @@ check(
 console.log("\n== 9. Horizon verification of all three settlements ==");
 const hashes = [receipt1?.transaction, receipt2?.transaction, receipt3?.transaction] as string[];
 check(new Set(hashes).size === 3, "three distinct transaction hashes");
+type HorizonTx = { successful?: boolean; ledger?: number; fee_charged?: string };
 const horizonFacts: Array<Record<string, unknown>> = [];
 for (const hash of hashes) {
-  let tx: { successful?: boolean; ledger?: number; fee_charged?: string } | null = null;
+  let tx: HorizonTx | null = null;
   for (let attempt = 0; attempt < 5 && tx === null; attempt += 1) {
     const response = await fetch(`${HORIZON}/transactions/${hash}`);
     if (response.status === 200) {
-      tx = (await response.json()) as typeof tx;
+      tx = (await response.json()) as HorizonTx;
       break;
     }
     await new Promise(resolve => setTimeout(resolve, 2000));

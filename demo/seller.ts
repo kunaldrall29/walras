@@ -23,7 +23,7 @@
 import { readFileSync } from "node:fs";
 import express from "express";
 import { paymentMiddleware } from "@x402/express";
-import { HTTPFacilitatorClient, x402ResourceServer } from "@x402/core/server";
+import { HTTPFacilitatorClient, x402ResourceServer, type RouteConfig } from "@x402/core/server";
 import { ExactStellarScheme } from "@x402/stellar/exact/server";
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 
@@ -61,7 +61,7 @@ server.register("stellar:*", new ExactStellarScheme());
 const app = express();
 
 const routes = Object.fromEntries(
-  corpus.resources.map(entry => [
+  corpus.resources.map((entry): [string, RouteConfig] => [
     `${entry.method} ${entry.path}`,
     {
       accepts: {

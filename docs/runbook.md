@@ -106,7 +106,7 @@ catalog as data worth backing up.
 | RPC errors | any — simulation runs on every `/verify` **and** every `/settle` (F-035, F-036), so RPC health gates the whole payment path | facilitator log |
 | Soft-drop rate | `EXTENSION-RESPONSES` `rejected` outcomes plus the indexer's warn logs; a rising rate means hostile or misconfigured clients (D-025) | facilitator log |
 | Catalog size | `pagination.total` on `GET /discovery/resources`; nothing prunes stale listings yet (THREAT-MODEL §2) | HTTP |
-| Submitter XLM balance | the submitter sponsors 22 973 stroops per settlement on every observed settlement (F-069); `pnpm preflight` flags a balance under 1 XLM | Horizon / preflight |
+| Submitter XLM balance | the submitter sponsors 22 973 stroops per settlement on the single-submitter path (F-069), 23 073 on the fee-bump path (F-086); `pnpm preflight` flags a balance under 1 XLM | Horizon / preflight |
 | Indexing soft budget | a warn fires when settle-time indexing exceeds its soft 250 ms budget (ARCHITECTURE §4) — it preempts nothing, but repeated warns deserve a look | facilitator log |
 
 ## 6. Degraded modes — actual behavior

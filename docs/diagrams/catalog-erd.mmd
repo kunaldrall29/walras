@@ -41,6 +41,13 @@ erDiagram
     TEXT params
     TEXT tags
   }
+  soft_drops {
+    INTEGER id PK
+    TEXT listing_key "NOT NULL"
+    TEXT field "NOT NULL"
+    TEXT reason_code "NOT NULL"
+    TEXT at "NOT NULL"
+  }
   resources ||--o{ accepts : "resource_id -> id, ON DELETE CASCADE"
   resources ||--o{ extension_keys : "resource_id -> id, ON DELETE CASCADE"
   resources ||--|| search_index : "rowid = resources.id (D-026)"

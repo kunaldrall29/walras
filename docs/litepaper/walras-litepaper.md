@@ -53,8 +53,8 @@ discipline walras adopts against exactly that.
 ## 3. Why Stellar
 
 **Fees make micropayments arithmetic, not aspiration.** A settlement on
-`stellar:testnet` costs the submitter 22 973 stroops = 0.0022973 XLM, measured
-uniformly across every walras settlement observed (F-069), consistent with the
+`stellar:testnet` costs the submitter 22 973 stroops = 0.0022973 XLM on the
+single-submitter path (F-069), 23 073 with a fee-bump signer (F-086), consistent with the
 0.0023073 XLM measured at the public x402.org facilitator (F-054). A fee that is a
 fraction of a cent is what keeps per-request pricing viable when the payment itself
 may be one cent.
@@ -182,12 +182,17 @@ Two observed deviations between spec and operators are recorded neutrally. The
 reference operator's search endpoint implements no pagination, and the reference SDK
 catalog returns `pagination: null` unconditionally (F-013); walras implements real
 keyset-cursor pagination with a truthful `partialResults` — over-delivery against an
-advisory MAY, driven by the RFP's requirement (D-003, D-027). And the public
-conformance baseline, x402.org, does not advertise the `bazaar` extension at all
-(F-042), so for the discovery path there is no operator to diff against — conformance
-is to the spec text and SDK types directly, which is exactly how walras approached it
-(D-010). The reference e2e catalog also violates the spec's MCP tuple-keying MUST;
-walras keys correctly and the defect is queued for an upstream report (D-009).
+advisory MAY, driven by the RFP's requirement (D-003, D-027). And there is no operator
+to diff the discovery path against. Two live Stellar facilitators were captured to
+establish that: x402.org does not advertise the `bazaar` extension at all (F-042), and
+`periplo-testnet.fly.dev` **does** advertise it while serving neither discovery endpoint
+— both 404, and its own service index lists only health, supported, verify, and settle
+(F-091). The second case is the RFP's "advertised versus reachable support" caution
+observed in the wild, and the reason walras advertises `bazaar` only because its
+endpoints are mounted (D-016). Discovery conformance is therefore to the spec text and
+SDK types directly, which is exactly how walras approached it (D-010). The reference e2e catalog also violates the spec's MCP tuple-keying MUST;
+walras keys correctly and the defect is documented with a reproduction, though not yet
+filed upstream (D-009, D-036).
 
 ## 6. Search
 
@@ -344,8 +349,8 @@ The RFP screens for drift, and drift is a process problem, so the answer is proc
   settlement through walras (F-066, EVIDENCE S2-2), and the protocol repo's own e2e
   suite run against walras as an external facilitator — 4/4 scenarios (F-067, EVIDENCE
   S2-4). Nothing under test was patched; two harness defects found on the way are
-  recorded and queued upstream rather than silently worked around (F-068, D-019,
-  D-020).
+  recorded with reproductions rather than silently worked around (F-068, D-019,
+  D-020) — found and documented, not yet filed upstream (D-036).
 - **A pinned spec and a fact ledger.** Every protocol claim traces to
   [`FACTS.md`](../FACTS.md) with status, date, and source at the pinned SHA; conflicts
   between spec and SDK become DECISIONS entries with the resolution and the upstream
@@ -393,6 +398,16 @@ independent walras instances.
   which is upstream-experimental — an accepted, recorded risk (D-023, F-070).
 - **Contract accounts untraced.** Custom `__check_auth` signature semantics are not
   yet verified end to end (Q-009, PARTIAL).
+- **Upstream findings unfiled.** Four divergences from the spec and the reference
+  implementation are documented here with reproductions (D-002, D-009, D-019, D-020),
+  and **none has been filed upstream** — no issue opened, no maintainer contacted
+  (D-036). The reproductions are ready; the filing is a grant-period commitment, not a
+  completed act.
+- **Documentation site outside the gates.** docs.walras.space is deployed manually —
+  no deploy configuration lives in the repository and no CI job publishes it — so it
+  can lag the branch, as it did when first measured (F-092, EVIDENCE Ops-1). The
+  commit stamped in every page footer is the authority on what a reader is seeing;
+  `pnpm check:site` verifies it against the tree (D-035).
 
 ## 13. References
 

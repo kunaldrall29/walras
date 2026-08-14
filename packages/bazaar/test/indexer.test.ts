@@ -345,6 +345,229 @@ describe("indexSettledPayment", () => {
     });
   });
 
+  describe("bounded-work invariant — Ajv ReDoS guard (DECISIONS D-015)", () => {
+    it("indexes fast when the client schema carries a catastrophic-backtracking pattern", () => {
+      const store = memStore();
+      // Evil pattern + matching info: against the raw SDK path this drives Ajv
+      // to tens of seconds on ~140 bytes (reproduced). The indexer strips
+      // regex keywords before compile, so the pattern is inert. `info` still
+      // shape-validates (the pattern constraint is simply gone), the listing
+      // is cataloged, and the whole call returns well under a second.
+      const extension = makeGetExtension();
+      (extension.schema as { properties: Record<string, unknown> }).properties.evil = {
+        type: "string",
+        pattern: "^(a+)+$",
+      };
+      (extension.info as { evil?: string }).evil = "a".repeat(40) + "!";
+      const payload = makePayload({
+        resource: { url: "https://api.example.com/weather" },
+        extensions: { bazaar: extension },
+      });
+
+      const start = performance.now();
+      const outcome = indexSettledPayment(store, payload, makeRequirements(), T0);
+      const elapsedMs = performance.now() - start;
+
+      expect(outcome.status).toBe("indexed");
+      expect(elapsedMs).toBeLessThan(1000);
+    });
+
+    it("also neutralizes a patternProperties (regex-keyed) schema", () => {
+      const store = memStore();
+      const extension = makeGetExtension();
+      (extension.schema as Record<string, unknown>).patternProperties = {
+        "^(x+)+$": { type: "string" },
+      };
+      (extension.info as Record<string, unknown>)["x".repeat(40) + "!"] = "y";
+      const payload = makePayload({
+        resource: { url: "https://api.example.com/weather" },
+        extensions: { bazaar: extension },
+      });
+
+      const start = performance.now();
+      const outcome = indexSettledPayment(store, payload, makeRequirements(), T0);
+      expect(performance.now() - start).toBeLessThan(1000);
+      expect(outcome.status).toBe("indexed");
+    });
+
+    it("rejects a schema that blows the node budget with a distinct machine code", () => {
+      const store = memStore();
+      // >2000 nodes but only a few KiB serialized — trips the node budget, not
+      // the 64 KiB byte cap, so the distinct too-complex code is what fires.
+      const huge = { enum: Array.from({ length: 2500 }, (_, i) => i) };
+      const extension = { ...makeGetExtension(), schema: huge };
+      const outcome = indexSettledPayment(
+        store,
+        makePayload({ extensions: { bazaar: extension } }),
+        makeRequirements(),
+        T0,
+      );
+      expect(outcome).toMatchObject({ status: "rejected", code: "bazaar_schema_too_complex" });
+      expect(store.count()).toBe(0);
+    });
+  });
+
+  describe("routeTemplate hardening beyond the SDK (RFP 3.B)", () => {
+    it.each([
+      ["double-encoded traversal", "/users/%252e%252e/admin"],
+      ["protocol-relative authority", "//evil.example/x"],
+      ["percent-encoded null byte", "/a/%00/b"],
+      ["backslash traversal", "/a/..\\b"],
+    ])(
+      "drops a hostile routeTemplate the SDK would accept (%s) and falls back to the concrete path",
+      (_n, tpl) => {
+        const store = memStore();
+        const extension = { ...makeGetExtension(), routeTemplate: tpl };
+        const payload = makePayload({
+          resource: { url: "https://api.example.com/users/123" },
+          extensions: { bazaar: extension },
+        });
+
+        const outcome = indexSettledPayment(store, payload, makeRequirements(), T0);
+
+        expect(outcome).toMatchObject({
+          status: "indexed",
+          resource: "https://api.example.com/users/123",
+        });
+        // The hostile template never became part of the catalog key.
+        expect(store.getListing("https://api.example.com/users/123", "http", "")).toBeDefined();
+      },
+    );
+  });
+
+  describe("soft-drop audit log (RFP task 3.A)", () => {
+    it("records one row per validated-away field, keyed to the listing", () => {
+      const store = memStore();
+      const extension = { ...makeGetExtension(), routeTemplate: "/users/%252e%252e/admin" };
+      const payload = makePayload({
+        resource: {
+          url: "https://api.example.com/users/123",
+          serviceName: "x".repeat(33),
+          iconUrl: "http://127.0.0.1/icon.png",
+        },
+        extensions: { bazaar: extension },
+      });
+
+      const outcome = indexSettledPayment(store, payload, makeRequirements(), T0);
+      expect(outcome.status).toBe("indexed");
+
+      const key = BazaarStore.softDropKey("https://api.example.com/users/123", "http", "");
+      const drops = store.softDropsFor(key);
+      const fields = drops.map(d => d.field).sort();
+      expect(fields).toEqual(["iconUrl", "routeTemplate", "serviceName"]);
+      expect(drops.every(d => d.at === T0)).toBe(true);
+      expect(drops.find(d => d.field === "routeTemplate")?.reasonCode).toBe("route_template_unsafe");
+    });
+
+    it("writes no soft-drop rows for a fully-valid listing", () => {
+      const store = memStore();
+      indexSettledPayment(store, makePayload(), makeRequirements(), T0);
+      const key = BazaarStore.softDropKey("https://api.example.com/weather", "http", "");
+      expect(store.softDropsFor(key)).toEqual([]);
+    });
+  });
+
+  describe("same-owner update merges, never blanks (DECISIONS D-024)", () => {
+    it("a sparse resettle to the seller's own payTo cannot erase existing metadata", () => {
+      const store = memStore();
+      // First settlement establishes rich metadata.
+      indexSettledPayment(
+        store,
+        makePayload({
+          resource: {
+            url: "https://api.example.com/weather",
+            description: "Weather data endpoint",
+            serviceName: "Acme Weather",
+            tags: ["weather", "forecast"],
+          },
+        }),
+        makeRequirements(),
+        T0,
+      );
+
+      // A hostile buyer echoes a stripped extension (no description/service/tags)
+      // to the SAME listing, paying the seller's own payTo. Merge semantics keep
+      // the seller's metadata intact.
+      const stripped = makePayload({
+        resource: { url: "https://api.example.com/weather" },
+      });
+      const outcome = indexSettledPayment(store, stripped, makeRequirements(), T1);
+
+      expect(outcome).toMatchObject({ status: "indexed", upsert: "updated" });
+      const listing = store.getListing("https://api.example.com/weather", "http", "");
+      expect(listing?.description).toBe("Weather data endpoint");
+      expect(listing?.serviceName).toBe("Acme Weather");
+      expect(listing?.tags).toEqual(["weather", "forecast"]);
+    });
+
+    it("still overwrites a field the resettle DOES provide", () => {
+      const store = memStore();
+      indexSettledPayment(
+        store,
+        makePayload({
+          resource: { url: "https://api.example.com/weather", description: "v1" },
+        }),
+        makeRequirements(),
+        T0,
+      );
+      indexSettledPayment(
+        store,
+        makePayload({
+          resource: { url: "https://api.example.com/weather", description: "v2 of the docs" },
+        }),
+        makeRequirements(),
+        T1,
+      );
+      expect(store.getListing("https://api.example.com/weather", "http", "")?.description).toBe(
+        "v2 of the docs",
+      );
+    });
+  });
+
+  describe("URL squatting — the attacker-FIRST ordering (known limitation)", () => {
+    // This documents CURRENT behavior, not a defended property. A settled
+    // payment carries no proof that its payTo controls the echoed resource.url
+    // origin, so whoever settles FIRST for a (resource, type, toolName) key owns
+    // it. EVIDENCE S3-4 only exercised the honest-first order; this locks in the
+    // real attacker-first outcome so the limitation is visible and tested rather
+    // than hidden. See DECISIONS D-032 and THREAT-MODEL "Discovery URL squatting".
+    it("an attacker who settles first squats a victim's URL and locks the real seller out", () => {
+      const store = memStore();
+      const victimUrl = "https://weather.victim.example/current";
+
+      // Attacker settles a dust self-payment (payTo = attacker = SELLER_B) while
+      // echoing the victim's URL and attacker-authored metadata.
+      const attackerPayload = makePayload({
+        resource: { url: victimUrl, description: "ATTACKER COPY", serviceName: "Not The Victim" },
+      });
+      const first = indexSettledPayment(
+        store,
+        attackerPayload,
+        makeRequirements({ payTo: SELLER_B }),
+        T0,
+      );
+      expect(first).toMatchObject({ status: "indexed", upsert: "created" });
+
+      // The real seller's later honest settlement to their own payTo is now
+      // rejected — they are locked out of their own URL.
+      const victim = indexSettledPayment(
+        store,
+        makePayload({ resource: { url: victimUrl, description: "The real service" } }),
+        makeRequirements({ payTo: SELLER_A }),
+        T1,
+      );
+      expect(victim).toMatchObject({
+        status: "rejected",
+        code: "bazaar_listing_owned_by_other_payee",
+      });
+
+      // The squatted, attacker-owned listing is what the catalog serves.
+      const listing = store.getListing(victimUrl, "http", "");
+      expect(listing?.ownerPayTo).toBe(SELLER_B);
+      expect(listing?.serviceName).toBe("Not The Victim");
+    });
+  });
+
   describe("the never-throws invariant (DECISIONS D-015)", () => {
     it("returns an error outcome when the store fails, and the header encoder omits it", () => {
       const store = new BazaarStore(":memory:");

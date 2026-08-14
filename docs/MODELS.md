@@ -63,8 +63,8 @@ audit question, each already permanent or reproducible:
 | The catalog trace | `accepts` row (scheme, network, asset, amount, payTo) + `lastSettledAt`, `settleCount` | the `accepts` table, for listings only — a settlement without a discovery extension leaves no walras-side trace beyond logs, by design |
 
 Fees are not in the receipt (the wire type has no field for them); the fee is an
-on-chain fact — 22 973 stroops on every observed walras settlement (F-069, EVIDENCE
-S2-3), read back from Horizon, never asserted from memory.
+on-chain fact — 22 973 stroops on the single-submitter path (F-069, EVIDENCE S2-3),
+23 073 on the fee-bump path (F-086), read back from Horizon, never asserted from memory.
 
 ## 4. Soft-drop record
 

@@ -116,8 +116,9 @@ Throughput scale-out is configuration, not code changes (D-012):
 
 ### 7. Know what you are sponsoring
 
-Every observed walras settlement on `stellar:testnet` charged the submitter
-22 973 stroops = 0.0022973 XLM — measured, and uniform across runs (F-069).
+Every observed single-submitter walras settlement on `stellar:testnet` charged
+22 973 stroops = 0.0022973 XLM (F-069); with a fee-bump signer configured the
+charge is 23 073 stroops, +100 (F-086) — both measured, not asserted.
 The settlement fee is derived from a fresh settle-time simulation and capped
 by `MAX_TRANSACTION_FEE_STROOPS`, default 50 000 stroops (F-037) — roughly 2x
 headroom over the observed fee (F-069). Budget the submitter's XLM against

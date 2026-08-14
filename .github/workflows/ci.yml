@@ -23,6 +23,8 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm -r test
+      - name: Search-quality gate (fails on >5% nDCG@10 regression vs eval/search/baseline.json)
+        run: pnpm eval:search --gate
 
   docs:
     runs-on: ubuntu-latest
