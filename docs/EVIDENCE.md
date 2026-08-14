@@ -2237,6 +2237,50 @@ deploy — the gates stay offline and deterministic (D-035).
 
 ---
 
+## Site — walras.space landing v2 (2026-08-14)
+
+The public landing page, `apps/site/index.html`. Provenance: imported from the Claude
+Design project "Walras.space site specification", file `Walras Landing v2.dc.html`, whose
+export (the `<x-dc>` template + a `DCLogic` component + the `support.js` runtime) is kept
+verbatim under `apps/site/design/`. The shipped page is a **single self-contained file** —
+the `DCLogic` React-runtime class was translated to vanilla JS (the animation timeline
+reproduced event-for-event, then scaled per §9 below), so nothing but Google Fonts loads at
+runtime.
+
+**Honesty gating (v2 brief §7), each verified:**
+
+| Rule | Implementation | Verified |
+|---|---|---|
+| Badge truthfulness | One `CONFIG` object at the top; `FACILITATOR_URL:""` ⇒ badge stays `OPEN SOURCE · APACHE-2.0 · IN DEVELOPMENT` and **no** network call fires. Set ⇒ a single `GET {url}/supported` (5 s timeout) flips it to `… STELLAR TESTNET` only on 200. | Runtime network log: the only external requests are fonts; the probe is guarded off (`if(!CONFIG.FACILITATOR_URL) return`). |
+| Ticker / LEDGER real-values-only | Each segment renders only when its `CONFIG` value is truthy (`CATALOG_COUNT` only when > 0); an empty set removes the whole ticker row. No placeholder text can reach production. | Rendered ticker shows only the real settled tx (`641f…7b8d`, S6-3) + measured fee (0.0023 XLM). |
+| No dead links | The design's `Walras Browse.dc.html` (×3) → the GitHub repo with a `TODO: repoint at /browse` comment; `#docs` (×3) → `https://docs.walras.space`. | Static scan: zero relative/fragment hrefs remain. |
+| Footer small print | `Testnet software. Unaudited. Don't point mainnet funds at it yet.` | Present, exact. |
+| No trackers / third-party calls | Only fonts.googleapis/gstatic at runtime; one guarded facilitator probe; no analytics, cookies, or third-party JS. | Playwright network log + static scan. |
+| Copy corrected to repo truth | Sell snippet facilitator → `http://127.0.0.1:4021`; Operate snippet → the real `git clone / pnpm install / setup-accounts / pnpm build / node …` sequence (no `docker`, which does not exist in the repo); the `0 XLM` ledger caption → "In fees, when settlement is fee-bumped" (F-086). | Rendered desktop screenshot. |
+
+**QA against §8/§9, in a real browser** (Chromium 151 headless; Google Fonts loaded live):
+
+- **360px:** `document.scrollingElement.scrollWidth == clientWidth == 360` — **no horizontal scroll**; the page stacks cleanly.
+- **Reduced motion:** with `prefers-reduced-motion: reduce`, the hero renders the full settled end state immediately — terminal DOM contains `CLEARED` and `200 OK` at load, figure locked at equilibrium, CLEARED stamp shown, ghost `200`.
+- **Hero within 3s (§9, fixed — D-038):** the design timeline settled at ~7.8s; the shipped page scales every offset by 0.34, so the full sequence lands at **2.86s** (CLEARED 2.45s, 200 OK 2.65s), cadence preserved. `⏎` replays it; the Enter guard ignores INPUT/TEXTAREA/BUTTON/A targets.
+- **AA contrast (§8, fixed — D-038):** the four inline code-chips inheriting the muted card colour (#6B6E76) measured **4.18:1** on their composited background; given explicit #565961 they measure **5.74:1**. The terminal's dim-amber text, flagged in the source as a contrast fix (0.75 alpha), passes at 4.63:1.
+- **Focus / keyboard:** every control (RUN button, three tabs with arrow-key roving + `role=tablist`, nav/footer links) shows a visible `:focus-visible` outline; Enter replays the sequence.
+- **Head:** favicon data-URI, `og:*`, `twitter:card`, canonical, `lang="en"` all present.
+
+Screenshots: `apps/site/screenshots/` — `desktop-1440.png`, `mobile-360.png`,
+`reduced-motion.png`, `hero-animation-3s.png`.
+
+**Deploy status.** walras.space is already served on Vercel from a project whose domain
+binding is not identifiable among the account's projects, so the v2 was **not** pushed onto
+that production domain unattended. The badge is in `IN DEVELOPMENT` (the only state the brief
+permits before the facilitator is live), and the file is committed at `apps/site/index.html`;
+promotion to the apex + www (and the badge flip to `STELLAR TESTNET`, one `CONFIG` edit) is a
+human step against the owning Vercel project. The lemmalabs.space Lemma-5 badge currently
+reads "In development" (honest, not false); upgrading its text needs the lemmalabs source,
+which is not in this workspace.
+
+---
+
 ## Not yet captured
 
 | Section | Blocked on |

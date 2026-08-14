@@ -822,3 +822,32 @@ Four decisions shaped how:
 Also new and generic (walras-side, Apache-2.0, reusable beyond this integration):
 `scripts/testnet-usdc.mjs` funds a testnet account with USDC off the DEX (path-payment to
 self), removing the captcha-gated Circle faucet from the automated demo loop.
+
+---
+
+## D-038 — The landing hero settles in <3s and code-chips meet AA: the v2 brief's §8/§9 override the design's own timeline and palette.
+**Status:** ADOPTED · 2026-08-14 · Evidence: EVIDENCE §Site; apps/site/index.html
+
+The walras.space landing (`apps/site/index.html`) was implemented from the Claude Design
+export `Walras Landing v2.dc.html`, which is preserved verbatim under
+`apps/site/design/`. The v2 brief states its §7 honesty rules, §8 technical requirements,
+and §9 acceptance checklist override the design wherever they conflict — fix in code, note
+here. Two such fixes:
+
+1. **§9 "hero sequence plays within 3s."** The design's `buildEvents()` timeline settles
+   the terminal at ~7.2s (200 OK ~7.8s, full run ~8.4s), measured in a real browser. The
+   implementation scales every offset by 0.34 so the full sequence — typing, the tâtonnement
+   price-steps, settle, CLEARED, 200 OK, replay hint — lands at 2.86s (CLEARED 2.45s, 200 OK
+   2.65s), preserving the relative cadence. Reduced motion is unaffected: it still jumps
+   straight to the settled end state (§8). The design file's timeline is left as imported;
+   only the shipped page carries the scale.
+
+2. **§8 AA contrast.** Four inline mono code-chips (`search_resources`, `paid_call`,
+   `pnpm install && pnpm build`, `node`) inherit the muted card-body colour #6B6E76, which on
+   the chip's composited background (rgba(23,27,43,0.05) over #F6F3EC ≈ #EBE8E2) measures
+   4.18:1 — below the 4.5:1 AA floor for 13.5px text. All inline code-chips are given an
+   explicit #565961 (5.74:1). The brief says fix, do not waive; darkening the chip text keeps
+   the muted look while clearing AA.
+
+Everything else in the design shipped faithfully; the honesty overrides (badge, ticker,
+dead links, snippets, footer) are catalogued in the site README and EVIDENCE §Site.
