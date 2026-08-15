@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>walras — conformance</title>
+<meta name="description" content="walras conformance evidence: unmodified stock x402 clients pointed at walras on stellar:testnet. Every check maps to a dated transcript in docs/EVIDENCE.md.">
+<link rel="canonical" href="https://walras.space/conformance">
+<meta property="og:title" content="walras — conformance">
+<meta property="og:description" content="Stock clients, unmodified. Every conformance check maps to a dated, on-chain-verifiable transcript in docs/EVIDENCE.md.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://walras.space/conformance">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20fill='%238C2B23'/%3E%3Ctext%20x='32'%20y='47'%20font-family='Georgia,%20serif'%20font-style='italic'%20font-weight='600'%20font-size='46'%20fill='%23F6F3EC'%20text-anchor='middle'%3Ew%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html, body { margin: 0; padding: 0; background: #F6F3EC; }
+body { font-family: 'Archivo', 'Helvetica Neue', sans-serif; color: #171B2B; -webkit-font-smoothing: antialiased; }
+a { color: #171B2B; text-decoration: underline; text-decoration-color: #8C2B23; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { color: #8C2B23; }
+::selection { background: #8C2B23; color: #F6F3EC; }
+:focus-visible { outline: 2px solid #8C2B23; outline-offset: 3px; }
+.navlink:hover { color: #8C2B23; }
+.btn-primary:hover { background: #171B2B; color: #F6F3EC; }
+.btn-outline:hover { border-color: #8C2B23; color: #8C2B23; }
+.footlink:hover { color: #E29A3C; }
+.stamp-pass { display: inline-block; transform: rotate(-3deg); border: 1.5px solid #8C2B23; border-radius: 2px; color: #8C2B23; font-size: 10px; font-weight: 600; letter-spacing: 0.24em; padding: 2px 6px 2px 9px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div style="border-top: 4px solid #8C2B23; background: #F6F3EC; min-height: 100vh; display: flex; flex-direction: column;">
+  <div style="max-width: 1280px; width: 100%; margin: 0 auto; padding: 0 clamp(20px, 4vw, 40px); box-sizing: border-box;">
+    <nav style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 24px; padding: 24px 0; border-bottom: 1px solid #D9D4C8;">
+      <div style="flex: 1 1 auto;">
+        <a href="/" style="display: inline-flex; align-items: baseline; gap: 8px; text-decoration: none; color: #171B2B;"><span style="font-family: 'EB Garamond', Georgia, serif; font-style: italic; font-weight: 600; font-size: 27px;">walras</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #6B6E76;">.space</span></a>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px 26px; align-items: baseline;">
+        <a href="/browse" class="navlink" style="font-size: 12px; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; text-decoration: none; color: #171B2B;">Ledger</a>
+        <a href="/conformance" aria-current="page" style="font-size: 12px; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; text-decoration: none; color: #8C2B23; border-bottom: 2px solid #8C2B23; padding-bottom: 2px;">Conformance</a>
+        <a href="https://docs.walras.space" class="navlink" style="font-size: 12px; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; text-decoration: none; color: #171B2B;">Docs</a>
+        <a href="https://github.com/kunaldrall29/walras" class="navlink" style="font-size: 12px; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; text-decoration: none; color: #171B2B;">GitHub</a>
+      </div>
+    </nav>
+  </div>
+  <main style="flex: 1 1 auto; max-width: 1280px; width: 100%; margin: 0 auto; padding: 56px clamp(20px, 4vw, 40px) 96px; box-sizing: border-box;">
+    <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 24px;">
+      <span style="flex: 1 1 auto; font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #8C2B23;">Conformance</span>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #6B6E76;">docs/EVIDENCE.md is canonical</span>
+    </div>
+    <h1 style="margin: 20px 0 0 0; font-family: 'EB Garamond', Georgia, serif; font-weight: 500; font-size: clamp(46px, 7vw, 110px); line-height: 0.98; letter-spacing: -0.015em; max-width: 16ch; text-wrap: balance;">Stock clients, unmodified.</h1>
+    <p style="margin: 26px 0 0 0; max-width: 62ch; font-size: 17px; line-height: 1.7; text-wrap: pretty;">Conformance is tested by pointing unmodified stock x402 clients at walras — on the reasoning that a facilitator that needs a special client isn't one. Every check below maps to a dated, on-chain-verifiable transcript in <a href="https://github.com/kunaldrall29/walras/blob/session-0-verification/docs/EVIDENCE.md">docs/EVIDENCE.md</a>.</p>
+
+    <!-- Honesty (spec §7): the design's specimen run (9/9, fake commits, invented
+         client versions, a fabricated FAIL row) is replaced entirely by real,
+         evidenced checks. Each row maps to a section of docs/EVIDENCE.md and,
+         where a settlement is involved, an on-chain transaction. -->
+    <div style="margin-top: 56px;">
+      <div style="display: flex; align-items: baseline; gap: 14px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8C2B23;">01</span><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #6B6E76;">Summary</span></div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 0 32px; border-top: 2px solid #171B2B; border-bottom: 1px solid #D9D4C8; margin-top: 18px;">
+        <div style="padding: 26px 0 30px 0;">
+          <div style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: clamp(18px, 2vw, 22px); letter-spacing: -0.01em; overflow-wrap: anywhere;">2026-08-14</div>
+          <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #6B6E76; margin-top: 12px;">Latest evidence</div>
+        </div>
+        <div style="padding: 26px 0 30px 0;">
+          <div style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: clamp(18px, 2vw, 22px); letter-spacing: -0.01em; overflow-wrap: anywhere;">17fc989</div>
+          <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #6B6E76; margin-top: 12px;">Pinned x402 spec</div>
+        </div>
+        <div style="padding: 26px 0 30px 0;">
+          <div style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: clamp(18px, 2vw, 22px); letter-spacing: -0.01em; overflow-wrap: anywhere;">exact</div>
+          <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #6B6E76; margin-top: 12px;">Scheme</div>
+        </div>
+        <div style="padding: 26px 0 30px 0;">
+          <div style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: clamp(18px, 2vw, 22px); letter-spacing: -0.01em; overflow-wrap: anywhere;">stellar:testnet</div>
+          <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #6B6E76; margin-top: 12px;">Network</div>
+        </div>
+        <div style="padding: 26px 0 30px 0;">
+          <div><span style="display: inline-block; transform: rotate(-3deg); border: 2px solid #8C2B23; border-radius: 2px; color: #8C2B23; font-size: 15px; font-weight: 600; letter-spacing: 0.3em; padding: 6px 10px 5px 15px; text-transform: uppercase;">Pass</span></div>
+          <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #6B6E76; margin-top: 14px;">9 / 9 checks</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 60px; max-width: 1000px;">
+      <div style="display: flex; align-items: baseline; gap: 14px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8C2B23;">02</span><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #6B6E76;">Checks</span></div>
+      <div style="border-top: 2px solid #171B2B; margin-top: 18px;">
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 1 1 340px; font-size: 15px; line-height: 1.55;">Unpaid request returns 402 with machine-readable terms</span>
+          <span style="flex: 0 0 150px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: #6B6E76;">@x402/fetch 2.20.0</span>
+          <a href="https://github.com/kunaldrall29/walras/blob/session-0-verification/docs/EVIDENCE.md" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px;">S2-2 →</a>
+          <span class="stamp-pass">Pass</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 1 1 340px; font-size: 15px; line-height: 1.55;">Stock client completes 402 → pay → settle, on-chain (<a href="https://stellar.expert/explorer/testnet/tx/ac50c0910b3484ae6f2b070f35a95d1062dd3269cd4f877434dbcf2d7d3cc155" style="font-family: 'IBM Plex Mono', monospace; font-size: 0.9em;">tx ac50c091…cc155</a>)</span>
+          <span style="flex: 0 0 150px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: #6B6E76;">@x402/fetch 2.20.0</span>
+          <a href="https://github.com/kunaldrall29/walras/blob/session-0-verification/docs/EVIDENCE.md" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px;">S2-3 →</a>
+          <span class="stamp-pass">Pass</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 1 1 340px; font-size: 15px; line-height: 1.55;">x402 repo e2e suite passes against walras (4 / 4: fetch × express, hono; axios)</span>
+          <span style="flex: 0 0 150px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: #6B6E76;">x402 e2e @ 17fc989</span>
+          <a href="https://github.com/kunaldrall29/walras/blob/session-0-verification/docs/EVIDENCE.md" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px;">S2-4 →</a>
+          <span class="stamp-pass">Pass</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 1 1 340px; font-size: 15px; line-height: 1.55;">A replayed payload is rejected at settle, with a non-null reason</span>
+          <span style="flex: 0 0 150px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: #6B6E76;">@x402/core 2.20.0</span>
+          <a href="https://github.com/kunaldrall29/walras/blob/session-0-verification/docs/EVIDENCE.md" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px;">S2-6 →</a>
+          <span class="stamp-pass">Pass</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 1 1 340px; font-size: 15px; line-height: 1.55;">An amount-mismatch payload is rejected at verify (pre-simulation)</span>
+          <span style="flex: 0 0 150px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: #6B6E76;">@x402/core 2.20.0</span>
+          <a href="https://github.com/kunaldrall29/walras/blob/session-0-verification/docs/EVIDENCE.md" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px;">S2-6 →</a>
+          <span class="stamp-pass">Pass</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 1 1 340px; font-size: 15px; line-height: 1.55;">An expired auth entry is rejected on re-simulation</span>
+          <span style="flex: 0 0 150px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: #6B6E76;">@x402/core 2.20.0</span>
+          <a href="https://github.com/kunaldrall29/walras/blob/session-0-verification/docs/EVIDENCE.md" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px;">S2-6 →</a>
+          <span class="stamp-pass">Pass</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 1 1 340px; font-size: 15px; line-height: 1.55;">Forged listing metadata is soft-dropped at the trust boundary; settlement untouched</span>
+          <span style="flex: 0 0 150px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: #6B6E76;">hostile client</span>
+          <a href="https://github.com/kunaldrall29/walras/blob/session-0-verification/docs/EVIDENCE.md" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px;">S3-4 →</a>
+          <span class="stamp-pass">Pass</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 1 1 340px; font-size: 15px; line-height: 1.55;">An MCP agent completes discover → pay using only two tools</span>
+          <span style="flex: 0 0 150px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: #6B6E76;">@modelcontextprotocol/sdk</span>
+          <a href="https://github.com/kunaldrall29/walras/blob/session-0-verification/docs/EVIDENCE.md" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px;">S6-3 →</a>
+          <span class="stamp-pass">Pass</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 1 1 340px; font-size: 15px; line-height: 1.55;">A real production tool is paid by an agent with zero prior integration (Policywright)</span>
+          <span style="flex: 0 0 150px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: #6B6E76;">MCP agent</span>
+          <a href="https://github.com/kunaldrall29/walras/blob/session-0-verification/docs/EVIDENCE.md" style="font-family: 'IBM Plex Mono', monospace; font-size: 12px;">S6-4 →</a>
+          <span class="stamp-pass">Pass</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 60px; max-width: 1000px;">
+      <div style="display: flex; align-items: baseline; gap: 14px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #8C2B23;">03</span><span style="font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #6B6E76;">Sessions</span></div>
+      <div style="border-top: 2px solid #171B2B; margin-top: 18px;">
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 0 0 110px; font-family: 'IBM Plex Mono', monospace; font-size: 13.5px;">2026-08-14</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #6B6E76;">walras 5e11318</span>
+          <span style="flex: 1 1 240px; font-size: 13.5px; color: #6B6E76;">Policywright — a real production tool paid by a zero-integration agent</span>
+          <span class="stamp-pass">Pass</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 0 0 110px; font-family: 'IBM Plex Mono', monospace; font-size: 13.5px;">2026-08-05</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #6B6E76;">walras ba8b5cb</span>
+          <span style="flex: 1 1 240px; font-size: 13.5px; color: #6B6E76;">MCP discover → pay with search_resources + paid_call</span>
+          <span class="stamp-pass">Pass</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding: 15px 0; border-bottom: 1px solid #D9D4C8;">
+          <span style="flex: 0 0 110px; font-family: 'IBM Plex Mono', monospace; font-size: 13.5px;">2026-08-02</span>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #6B6E76;">walras c58c983</span>
+          <span style="flex: 1 1 240px; font-size: 13.5px; color: #6B6E76;">Stock-client round-trip + x402 e2e suite (4 / 4) + negative live tests</span>
+          <span class="stamp-pass">Pass</span>
+        </div>
+      </div>
+      <p style="margin: 22px 0 0 0; max-width: 62ch; font-size: 14.5px; line-height: 1.65; color: #6B6E76; text-wrap: pretty;">Dual-baseline transcripts live in-repo — walras is diffed against the public x402.org Stellar facilitator (<span style="font-family: 'IBM Plex Mono', monospace; font-size: 0.92em;">EVIDENCE §S2-5</span>). Every result above maps to a replayable transcript in <span style="font-family: 'IBM Plex Mono', monospace; font-size: 0.92em;">docs/EVIDENCE.md</span>. The chain is canonical.</p>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 56px; align-items: center;">
+      <a href="https://github.com/kunaldrall29/walras/blob/session-0-verification/docs/EVIDENCE.md" class="btn-primary" style="display: inline-flex; padding: 15px 24px; background: #8C2B23; color: #F6F3EC; font-size: 12.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; text-decoration: none;">Read EVIDENCE.md</a>
+      <a href="/browse" class="btn-outline" style="display: inline-flex; padding: 14px 24px; border: 1px solid #171B2B; color: #171B2B; font-size: 12.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; text-decoration: none;">Open the ledger</a>
+    </div>
+  </main>
+  <footer style="background: #171B2B; color: #F6F3EC;">
+    <div style="max-width: 1280px; margin: 0 auto; padding: 28px clamp(20px, 4vw, 40px) 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: baseline;">
+        <span style="font-size: 13.5px; color: rgba(246, 243, 236, 0.85);"><span style="font-family: 'EB Garamond', Georgia, serif; font-style: italic; font-weight: 600; font-size: 17px;">walras</span> — an x402 facilitator &amp; Bazaar for Stellar</span>
+        <span style="font-size: 12px; color: rgba(246, 243, 236, 0.5);">Apache-2.0</span>
+        <a href="https://github.com/kunaldrall29/walras" class="footlink" style="font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; color: rgba(246, 243, 236, 0.75);">GitHub</a>
+        <a href="https://github.com/x402-foundation/x402" class="footlink" style="font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; color: rgba(246, 243, 236, 0.75);">x402 protocol</a>
+        <a href="https://stellar.org/x402" class="footlink" style="font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; color: rgba(246, 243, 236, 0.75);">Stellar</a>
+        <span style="font-size: 12px; color: rgba(246, 243, 236, 0.5);">a Lemma Labs project</span>
+      </div>
+      <div style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: rgba(246, 243, 236, 0.55);">Testnet software. Unaudited. Don't point mainnet funds at it yet.</div>
+    </div>
+  </footer>
+</div>
+</body>
+</html>

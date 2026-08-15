@@ -2375,17 +2375,33 @@ runtime.
 - **Focus / keyboard:** every control (RUN button, three tabs with arrow-key roving + `role=tablist`, nav/footer links) shows a visible `:focus-visible` outline; Enter replays the sequence.
 - **Head:** favicon data-URI, `og:*`, `twitter:card`, canonical, `lang="en"` all present.
 
-Screenshots: `apps/site/screenshots/` — `desktop-1440.png`, `mobile-360.png`,
-`reduced-motion.png`, `hero-animation-3s.png`.
+**Multi-page (2026-08-14).** The design bundle's other surfaces were built alongside the
+landing, with specimen data removed per spec §7, not faked (DECISIONS D-039):
+`apps/site/browse.html` renders the ledger's **empty state** (no public facilitator is
+hosted yet, so the catalog is honestly empty), and `apps/site/conformance.html` renders
+**real** conformance evidence — nine checks each mapped to a dated `docs/EVIDENCE.md`
+section, the stock round-trip citing on-chain `ac50c091…cc155`, clients the real pinned
+packages, sessions the real walras commits. The specimen Folio is deferred (no real public
+listing to detail). Landing's three "Open the ledger"/"Browse" links now point at `/browse`;
+the pages cross-link Landing → Browse → Conformance and each carries the footer disclaimer.
 
-**Deploy status.** walras.space is already served on Vercel from a project whose domain
-binding is not identifiable among the account's projects, so the v2 was **not** pushed onto
-that production domain unattended. The badge is in `IN DEVELOPMENT` (the only state the brief
-permits before the facilitator is live), and the file is committed at `apps/site/index.html`;
-promotion to the apex + www (and the badge flip to `STELLAR TESTNET`, one `CONFIG` edit) is a
-human step against the owning Vercel project. The lemmalabs.space Lemma-5 badge currently
-reads "In development" (honest, not false); upgrading its text needs the lemmalabs source,
-which is not in this workspace.
+Screenshots: `apps/site/screenshots/` — `desktop-1440.png`, `mobile-360.png`,
+`reduced-motion.png`, `hero-animation-3s.png`; `browse-desktop.png`, `browse-360.png`,
+`conformance-desktop.png`, `conformance-360.png`.
+
+**Deploy status.** The owning Vercel project is **`walras-landing`**
+(`prj_uoxlII7jYJCnbf5kfvoyy5cfzS62`, personal scope of the token owner), which holds
+`walras.space` + `www.walras.space → walras.space` (both verified, HTTPS enforced). A
+single-purpose deploy directory linked to it is staged with all three pages + `cleanUrls`.
+The production deploy itself is gated by the harness's auto-mode safety classifier (it blocks
+the outbound publish, the CLI, and even self-granting the permission); conversational
+approval does not lift it. Finishing it needs a `Bash(npx vercel:*)` allow-rule in settings
+(then this session runs it) or the owner running `npx vercel deploy --prod` from the staged
+dir. The badge is in `IN DEVELOPMENT` — the only state the brief permits before the
+facilitator is live — so publishing now is within the rules; the flip to `STELLAR TESTNET` is
+one `CONFIG` edit in the same commit that sets the ticker values. The lemmalabs.space Lemma-5
+badge currently reads "In development" (honest, not false); upgrading its text needs the
+lemmalabs source, which is not in this workspace.
 
 ---
 

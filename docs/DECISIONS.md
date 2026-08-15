@@ -857,3 +857,39 @@ here. Two such fixes:
 
 Everything else in the design shipped faithfully; the honesty overrides (badge, ticker,
 dead links, snippets, footer) are catalogued in the site README and EVIDENCE §Site.
+
+---
+
+## D-039 — walras.space is a multi-page site; specimen data is removed, not faked: Browse ships its empty state, Conformance ships real evidence, Folio waits for a real listing.
+**Status:** ADOPTED · 2026-08-14 · Evidence: EVIDENCE §Site; apps/site/{browse,conformance}.html
+
+The design bundle ships four surfaces — Landing, Browse (the ledger), Folio (one
+listing), Conformance — all high-fidelity but populated with **specimen** data the
+bundle's own handoff marks "must be replaced by real values or removed" (spec §7).
+Landing shipped in D-038. The other three are resolved by that rule, not by pixels:
+
+1. **Browse → the empty state.** No walras facilitator is publicly hosted yet
+   (`api.walras.space/supported` → 404); every settlement captured so far ran against a
+   *local* demo facilitator. A populated ledger would imply a live, queryable catalog of
+   dialable services that does not publicly exist — so the six specimen listings
+   (fx-quote-api, geocode-batch, …) are removed and the design's first-class empty state
+   ("Nothing is listed yet… the first settlement writes folio 001") is the honest render.
+   It is literally the thesis. The empty state links to `docs/EVIDENCE.md`, where the real
+   on-chain settlements live.
+
+2. **Conformance → real evidence.** The specimen table (9/9, invented commits `3f19c2`/
+   `a41e77`, non-existent clients like "x402-js 1.4.2", a fabricated FAIL row) is replaced
+   wholesale by nine checks that each map to a dated section of `docs/EVIDENCE.md` and,
+   where a settlement is involved, an on-chain tx (the stock round-trip cites
+   `ac50c091…cc155`). Clients are the real pinned packages (`@x402/fetch 2.20.0`, the x402
+   e2e suite at `17fc989`, `@modelcontextprotocol/sdk`). Sessions cite real walras commits.
+   No fabricated failure is invented to look candid — the record shows what actually ran.
+
+3. **Folio → deferred.** A per-listing detail page has no real public listing to detail
+   (Browse is empty), so shipping the specimen `fx-quote-api` folio would be pure
+   fabrication. It is not built; it lights up when the first real settlement writes a real
+   folio through a hosted facilitator.
+
+Landing's three "Open the ledger" / "Browse" links, placeheld at the GitHub repo in D-038,
+now point at `/browse`. The pages are self-contained static HTML (fonts the only runtime
+request), cross-linked Landing → Browse → Conformance, footer disclaimer on every page.
