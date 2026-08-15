@@ -390,6 +390,12 @@ the predicted 100-stroop delta measured exactly, and byte-identical to the basel
 operator's fee anatomy (F-054, F-055; F-086). The half of D-012 still not observed
 live is round-robin across multiple submitter seeds.
 
+**S7-2 follow-up (2026-08-15):** captured. A second Friendbot-funded submitter seed
+was added to `SUBMITTER_SECRET` (comma-separated, the format `config.ts` documents)
+and the demo re-run: five settlements whose Horizon `source_account` strictly
+alternates between the two submitters, every fee 22 973 stroops (EVIDENCE S7-2,
+F-095). Both halves of D-012 are now observed live, each in isolation.
+
 ---
 
 ## D-022 — Manual registration endpoint: skipped for the pre-build.

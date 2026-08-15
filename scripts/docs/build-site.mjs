@@ -121,6 +121,21 @@ const NAV = [
 ];
 
 /**
+ * Converts an on-disk route to the clean URL it is served under. Files keep
+ * their .html names in dist-site/; every emitted link drops the extension and
+ * dist-site/vercel.json ships `cleanUrls: true`, so Vercel serves the clean
+ * path and 308-redirects any old `.html` deep link onto it. Non-.html routes
+ * (e.g. /api/openapi.yaml) pass through untouched.
+ *
+ * @param route - Site route as stored in PAGES/NAV (root-absolute, .html).
+ * @returns The extensionless URL to emit in hrefs.
+ */
+function cleanRoute(route) {
+  if (route.endsWith("/index.html")) return route.slice(0, -"index.html".length);
+  return route.endsWith(".html") ? route.slice(0, -".html".length) : route;
+}
+
+/**
  * Derives a stable heading id, GitHub-style.
  *
  * @param text - Heading text.
@@ -154,7 +169,7 @@ function rewriteHref(href, sourceRel) {
   if (repoRel === null) {
     throw new Error(`${sourceRel}: link escapes the repository: ${href}`);
   }
-  if (PAGES.has(repoRel)) return PAGES.get(repoRel) + suffix;
+  if (PAGES.has(repoRel)) return cleanRoute(PAGES.get(repoRel)) + suffix;
   for (const [dir, sitePath] of ASSET_DIRS) {
     if (repoRel.startsWith(dir + "/")) return sitePath + repoRel.slice(dir.length) + suffix;
   }
@@ -201,7 +216,7 @@ function transformEvidenceText(token) {
     const ref = match[1];
     const anchor = EVIDENCE_ANCHORS.get(ref);
     const open = new Token("link_open", "a", 1);
-    open.attrSet("href", `/evidence.html${anchor ? `#${anchor}` : ""}`);
+    open.attrSet("href", `/evidence${anchor ? `#${anchor}` : ""}`);
     out.push(open, Object.assign(new Token("text", "", 0), { content: ref }));
     out.push(new Token("link_close", "a", -1));
     last = match.index + match[0].length;
@@ -422,7 +437,7 @@ function renderPage(sourceRel, route) {
       `<div class="nav-group"><div class="nav-title">${group}</div>${items
         .map(
           ([itemRoute, label]) =>
-            `<a href="${itemRoute}"${itemRoute === route ? ' class="active"' : ""}>${label}</a>`,
+            `<a href="${cleanRoute(itemRoute)}"${itemRoute === route ? ' class="active"' : ""}>${label}</a>`,
         )
         .join("")}</div>`,
   ).join("");
@@ -487,17 +502,17 @@ footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--line);font-si
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="/index.html">walras</a>
+  <a class="brand" href="/">walras</a>
   <details class="menu">
     <summary>Menu</summary>
     <div class="menu-panel">${nav}</div>
   </details>
 </header>
 <div class="layout">
-<nav class="sidebar"><a class="brand" href="/index.html">walras</a>${nav}</nav>
+<nav class="sidebar"><a class="brand" href="/">walras</a>${nav}</nav>
 <main>
 ${body}
-<footer>Generated from <a href="${GITHUB}/tree/${BRANCH}">${BRANCH}</a> @ <code>${COMMIT}</code> · Testnet software. Unaudited. Apache-2.0. See the <a href="/threat-model.html">threat model</a>.</footer>
+<footer>Generated from <a href="${GITHUB}/tree/${BRANCH}">${BRANCH}</a> @ <code>${COMMIT}</code> · Testnet software. Unaudited. Apache-2.0. See the <a href="/threat-model">threat model</a>.</footer>
 </main>
 </div>
 </body>
@@ -532,4 +547,8 @@ for (const [sourceRel, route] of PAGES) {
   pages += 1;
 }
 
-console.log(`build-site: ${pages} pages + assets → ${OUT} (commit ${COMMIT})`);
+// Serve every page extensionless; old `.html` deep links 308-redirect onto the
+// clean path, so nothing published before this change breaks.
+writeFileSync(join(OUT, "vercel.json"), JSON.stringify({ cleanUrls: true }, null, 2) + "\n");
+
+console.log(`build-site: ${pages} pages + assets → ${OUT} (commit ${COMMIT}, clean URLs)`);

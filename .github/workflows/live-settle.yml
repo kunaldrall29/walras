@@ -1,0 +1,68 @@
+name: live-settle
+
+# Real settled payments on stellar:testnet, on every push. The workflow creates
+# its accounts via Friendbot at run time and buys testnet USDC on the DEX
+# (scripts/testnet-usdc.mjs, no captcha faucet) — the repository holds no
+# secrets, and any fork reproduces the settlement by pushing.
+#
+# This is the live half of CI: ci.yml proves the code, this job proves the
+# money movement. It runs scripts/demo.sh happy path — a stock @x402/fetch
+# client pays a stock @x402/express seller through the walras facilitator,
+# settle-gated cataloging populates a fresh catalog, and the agent's settled
+# tx hash (with its stellar.expert link) lands in the job summary.
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: live-settle-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  settle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Create throwaway testnet accounts (Friendbot, run time — no repo secrets)
+        run: |
+          node scripts/setup-accounts.mjs > setup.out
+          grep -E '^[A-Z_]+=' setup.out > .env
+          # Mask the run-time seeds in logs. They are worthless throwaway
+          # testnet accounts, but the log should not normalize printing seeds.
+          while IFS='=' read -r k v; do
+            case "$k" in *SECRET*|*PRIVATE_KEY*) echo "::add-mask::$v";; esac
+          done < .env
+          grep -E '^(NETWORK|USDC_CONTRACT_ID|SERVER_STELLAR_ADDRESS)=' .env
+
+      - name: Buy testnet USDC on the DEX (path payment from Friendbot XLM)
+        run: node scripts/testnet-usdc.mjs "$(grep '^CLIENT_STELLAR_PRIVATE_KEY=' .env | cut -d= -f2-)" 2
+
+      - name: "Settle live: stock @x402/fetch buyer -> walras -> stock seller"
+        run: ./scripts/demo.sh | tee demo-out.txt
+
+      - name: Settled txs into the job summary
+        if: always()
+        run: |
+          {
+            echo '### live-settle — stellar:testnet'
+            echo '```'
+            tail -25 demo-out.txt 2>/dev/null || echo '(demo did not reach the summary)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload demo transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-logs
+          path: demo-logs/
+          if-no-files-found: ignore

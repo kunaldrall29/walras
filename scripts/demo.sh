@@ -84,7 +84,12 @@ require_strkey() { # name value prefix
 }
 SUBMITTER="${SUBMITTER_SECRET:-${FACILITATOR_STELLAR_PRIVATE_KEY:-}}"
 [ -n "$SUBMITTER" ] || die "SUBMITTER_SECRET (or FACILITATOR_STELLAR_PRIVATE_KEY) is not set in .env"
-require_strkey "SUBMITTER_SECRET" "$SUBMITTER" "S"
+# SUBMITTER_SECRET may be a comma-separated list — the facilitator's round-robin
+# knob (config.ts, DECISIONS D-012). Validate every seed, not just the first.
+IFS=',' read -ra _SUBMITTER_SEEDS <<< "$SUBMITTER"
+for _seed in "${_SUBMITTER_SEEDS[@]}"; do
+  require_strkey "SUBMITTER_SECRET" "$_seed" "S"
+done
 [ -n "${CLIENT_STELLAR_PRIVATE_KEY:-}" ] || die "CLIENT_STELLAR_PRIVATE_KEY is not set in .env"
 require_strkey "CLIENT_STELLAR_PRIVATE_KEY" "$CLIENT_STELLAR_PRIVATE_KEY" "S"
 [ -n "${SERVER_STELLAR_ADDRESS:-}" ] || die "SERVER_STELLAR_ADDRESS is not set in .env"

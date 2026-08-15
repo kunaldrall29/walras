@@ -2091,6 +2091,57 @@ live multi-submitter run.
 
 ---
 
+## S7-2 — Multi-submitter round-robin captured live (2026-08-15)
+
+The nuance S7-1 left open, closed the same way D-021 predicted for its sibling:
+configuration plus one funded account, zero facilitator code changes.
+
+**Setup:** a second submitter `GADH5EHIN4X3BPDTACP46VEIGWQNWDNKAAWZHLTMLSPMUB3FYABMRP22`
+created and Friendbot-funded (10 000 XLM, no USDC trustline — submitters never hold
+USDC), then `SUBMITTER_SECRET` set to the two seeds comma-separated (first submitter
+unchanged: `GDM7S4RB…BIXC`). `FEE_BUMP_SECRET` deliberately unset so each settlement's
+`source_account` IS the submitter that signed it — rotation is directly visible on
+Horizon with no envelope indirection.
+
+**One demo-side fix, recorded rather than hidden:** `scripts/demo.sh`'s preflight
+validated `SUBMITTER_SECRET` as a single 56-char strkey and died on the comma-separated
+form the facilitator itself documents and parses (`config.ts` splits on `,`; the
+preflight predates multi-seed use). The shape check now validates each seed in the
+list. Facilitator code untouched.
+
+**Run:** `./scripts/demo.sh` → **exit 0**, five fresh settlements (run dir
+`demo-logs/run-20260815T091617Z-happy`), `DEMO: PASS`, all fees demo-printed
+**22 973 stroops**.
+
+**Horizon verification of all five settlements (out-of-band):**
+
+```
+tx cccd8d5a…131a  ledger 4152764  ok=true  fee=22973  source=SUB1  fee_account=source
+tx 515174c5…b854  ledger 4152766  ok=true  fee=22973  source=SUB2  fee_account=source
+tx 3cf99b6b…69cc  ledger 4152768  ok=true  fee=22973  source=SUB1  fee_account=source
+tx eba8ab92…dae7  ledger 4152770  ok=true  fee=22973  source=SUB2  fee_account=source
+tx f98f360f…5048  ledger 4152772  ok=true  fee=22973  source=SUB1  fee_account=source
+
+SUB1 = GDM7S4RBRQQEOZHEGMUSGDSBCXNBENYRXNMDR27TZLMWYJXOZVV6BIXC (submitter 1)
+SUB2 = GADH5EHIN4X3BPDTACP46VEIGWQNWDNKAAWZHLTMLSPMUB3FYABMRP22 (submitter 2)
+```
+
+**Strict alternation** — SUB1, SUB2, SUB1, SUB2, SUB1 — across five consecutive
+settlements: the package's round-robin selection, observed on-chain rather than
+inferred from unit tests. Every fee is 22 973 stroops (= F-069 to the stroop; the
+single-signer, no-fee-bump anatomy, as expected with `FEE_BUMP_SECRET` unset).
+
+**Measured settle latency this run** (facilitator log `responseTime` on the five
+`POST /settle` requests): 7.21 s, 4.41 s, 3.44 s, 5.75 s, 5.18 s — **median 5.18 s**,
+5/5 settled.
+
+With this, every half of D-012's posture has been observed live: fee-bump decoupling
+in S7-1, submitter rotation here. The composed posture (multiple submitters PLUS the
+fee account) remains a configuration union of two individually-verified halves, not a
+separately captured run.
+
+---
+
 ## S0-7 — The second baseline, captured 12 days late: `periplo-testnet.fly.dev` (2026-08-14)
 
 Session 0's DoD named **two** baseline facilitators to capture. Only one (x402.org,
@@ -2180,6 +2231,63 @@ about its verify/settle conformance, its fee anatomy, or its correctness as a pa
 baseline. The differential payment baseline remains x402.org (D-010). Scope: eleven GETs
 (`/supported`, the service index, `/health`, and the eight paths above, all eight 404)
 plus one malformed `POST /verify` — read-only throughout, no payment, no state touched.
+
+---
+
+## S0-8 — Q-009 traced: contract-account (`__check_auth`) payers (2026-08-15)
+
+The last open verification-queue item, closed by source trace — pinned spec, installed
+package, installed SDK, and Stellar's own documentation; every claim independently
+re-verified against its cited line before recording. **This is code/docs analysis, not
+an executed C-payer round-trip** — no custom-account contract was deployed or paid.
+
+**Spec** (`specs/schemes/exact/scheme_exact_stellar.md` @ `17fc9890`, byte-identical
+in x402-foundation/x402 and coinbase/x402 — sha256 `34438214…7975`, 229 lines):
+
+- Appendix "Authorization Patterns", pattern 1 (auth-entry signing): "**Supports both
+  C-accounts and G-accounts**"; "The x402 protocol uses approach #1 for broader wallet
+  support (C-accounts and G-accounts)." Full-transaction signing ("Only supports
+  G-accounts") is explicitly not used.
+- Verification Rules §3: "Auth entries MUST use credential type
+  `sorobanCredentialsAddress` only." — exactly the Soroban credential type that routes
+  a C-address's authorization through its `__check_auth` export.
+- No signature-format rule exists anywhere: `__check_auth`, "contract account",
+  "nonce", "ed25519" never appear in the file. "Signed" is enforced operationally by
+  the mandatory re-simulation at verify AND settle.
+
+**Installed facilitator path** (`@x402/stellar@2.20.0`, dist inspected at file:line):
+
+- `validateAuthEntries` (`exact/facilitator/index.mjs:528-580`) checks credential
+  TYPE (`sorobanCredentialsAddress` only, :533-539) but never the address type —
+  `Address.fromScAddress().toString()` (:541) stringifies G- and C-addresses alike.
+- "Signed" = signature ScVal ≠ `scvVoid` (`chunk-4HPDVFME.mjs:49-52`); the package
+  performs **zero signature cryptography** — validity is delegated to
+  `server.simulateTransaction` of the client-signed tx (:343), which, with signed auth
+  entries present, runs in Soroban's **enforcing mode** and executes a C-account's
+  `__check_auth` exactly as on-chain (Stellar transaction-simulation docs), with
+  submission as the authoritative backstop for nonce replay and expiration.
+- Settle rebuilds only the envelope (facilitator source, fee, optional fee bump) and
+  copies the client's `xdr.SorobanAuthorizationEntry` objects verbatim (:146,
+  :158-170); the legacy address-credential preimage does not bind the tx source, so a
+  C-payer entry survives the rebuild by construction.
+
+**Constraints that bind a contract-account payer** (all spec-mandated): legacy V1
+address credentials only (CAP-71 `AddressV2`/delegate credentials are rejected by the
+strict enum check); no `subInvocations` beyond the transfer; the facilitator address
+nowhere in the auth entries; simulation must show ONLY payer-decrease +
+recipient-increase; expiration-ledger cap; SEP-41 tokens only.
+
+**The one real blocker is client-side, not facilitator-side**: the package's own
+client scheme cannot PRODUCE a C-payer payload — `AssembledTransaction.signAuthEntries`
+returns raw bytes, so `@stellar/stellar-sdk@16.2.0`'s `authorizeEntry` falls into its
+Ed25519 branch (`base/auth.js:58-63`), which throws on a C-address; the SDK's
+`{signatureScVal}` smart-wallet escape hatch (`base/auth.js:40-42`) is never plumbed
+through. A C-payer payload must be built with external tooling, after which the
+facilitator as-built accepts and settles it with **zero code changes**.
+
+Method note: three independent readers (spec, package, SDK/host semantics) produced
+36 material claims; an adversarial verify pass re-checked each against the cited
+file:line or URL — 36/36 CONFIRMED, none refuted.
 
 ---
 
@@ -2291,4 +2399,4 @@ which is not in this workspace.
 | ~~**Second baseline facilitator (S0 DoD)**~~ | **CAPTURED in S0-7** (2026-08-14), 12 days late. Recorded here rather than quietly closed: between 2026-08-02 and 2026-08-14 this was neither captured nor tracked as outstanding anywhere in FACTS, DECISIONS, or this table (D-034). |
 | **docs.walras.space is one commit behind** | Not blocked — **measured in Ops-1** (2026-08-14): deployed `ce3d9ca`, HEAD `c302fac`. Closing it is a human redeploy; nothing in this repository can perform or trigger it (no deploy config, no CI job). `scripts/check-site.sh` detects the drift; it does not fix it. |
 | **Upstream reports for D-009 / D-019 / D-020** | **FOUND, NOT FILED** (D-036). Three defects with reproductions; zero issues opened. Filing posts under a personal GitHub identity, so it was not done unattended. Not blocked on evidence — blocked on a human pressing submit. |
-| **Multi-submitter round-robin settlement** | Configuration shipped and unit-tested; never observed live. S7-1 ran one submitter plus the fee account (F-086). Needs a second funded submitter seed. |
+| ~~**Multi-submitter round-robin settlement**~~ | **CAPTURED in S7-2** (2026-08-15): a second Friendbot-funded submitter was added to `SUBMITTER_SECRET`, and five settlements' Horizon `source_account` strictly alternate SUB1/SUB2/SUB1/SUB2/SUB1 (F-095). Both halves of D-012's posture are now individually observed live; the composed run (rotation + fee bump together) has not been captured separately. |

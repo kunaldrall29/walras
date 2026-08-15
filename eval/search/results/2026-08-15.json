@@ -1,0 +1,516 @@
+{
+  "date": "2026-08-15",
+  "gitCommit": "c8e3ca79bc239d4c9c7fae38de3b873273742876",
+  "retriever": "fts5-bm25-baseline",
+  "bm25Weights": {
+    "name": 4,
+    "description": 2,
+    "params": 1,
+    "tags": 3
+  },
+  "corpusSha256": "094a953dfa0ecafbef56e612224a411cb21823e64e6bb54db944f1cac790e82b",
+  "corpusResources": 11,
+  "aggregates": {
+    "queries": 28,
+    "recallAt1": 0.8392857142857143,
+    "recallAt3": 0.9285714285714286,
+    "recallAt5": 0.9285714285714286,
+    "mrrAt10": 0.9107142857142857,
+    "ndcgAt5": 0.9094614637846288,
+    "ndcgAt10": 0.9094614637846288,
+    "zeroResultQueries": 0
+  },
+  "results": [
+    {
+      "query": "current weather in Zurich",
+      "rankedIds": [
+        "weather-current",
+        "weather-history",
+        "geocode-reverse",
+        "crypto-price",
+        "air-quality"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "what is the temperature outside right now",
+      "rankedIds": [
+        "weather-current",
+        "weather-history",
+        "crypto-price",
+        "geocode-reverse",
+        "translate",
+        "stock-quote"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "historical temperature records for a past date",
+      "rankedIds": [
+        "weather-history",
+        "weather-current",
+        "crypto-price",
+        "sentiment",
+        "stock-quote",
+        "air-quality",
+        "translate",
+        "geocode-forward",
+        "fx-rates"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "did it snow in Oslo in January 2019",
+      "rankedIds": [
+        "geocode-reverse",
+        "crypto-price",
+        "air-quality"
+      ],
+      "recall1": 0,
+      "recall3": 0,
+      "recall5": 0,
+      "reciprocalRank": 0,
+      "ndcg5": 0,
+      "ndcg10": 0
+    },
+    {
+      "query": "air pollution levels in my city",
+      "rankedIds": [
+        "air-quality",
+        "weather-current",
+        "weather-history",
+        "geocode-reverse",
+        "crypto-price"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "pm2.5 and ozone concentration readings",
+      "rankedIds": [
+        "air-quality",
+        "weather-history",
+        "weather-current",
+        "ip-info",
+        "geocode-forward",
+        "geocode-reverse",
+        "stock-quote"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "convert US dollars to euros",
+      "rankedIds": [
+        "weather-history",
+        "sentiment",
+        "ip-info",
+        "air-quality",
+        "geocode-forward",
+        "translate",
+        "crypto-price",
+        "weather-current"
+      ],
+      "recall1": 0,
+      "recall3": 0,
+      "recall5": 0,
+      "reciprocalRank": 0,
+      "ndcg5": 0,
+      "ndcg10": 0
+    },
+    {
+      "query": "usd to eur exchange rate",
+      "rankedIds": [
+        "fx-rates",
+        "crypto-price",
+        "weather-history",
+        "sentiment",
+        "ip-info",
+        "air-quality",
+        "geocode-forward",
+        "translate",
+        "weather-current"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "live foreign exchange rates for currency pairs",
+      "rankedIds": [
+        "fx-rates",
+        "crypto-price",
+        "weather-current",
+        "stock-quote",
+        "weather-history",
+        "air-quality",
+        "sentiment",
+        "translate"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "apple share price today",
+      "rankedIds": [
+        "crypto-price",
+        "stock-quote"
+      ],
+      "recall1": 0,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 0.5,
+      "ndcg5": 0.6309297535714575,
+      "ndcg10": 0.6309297535714575
+    },
+    {
+      "query": "stock quote for ticker AAPL",
+      "rankedIds": [
+        "stock-quote",
+        "fx-rates",
+        "crypto-price",
+        "weather-current",
+        "weather-history",
+        "air-quality",
+        "sentiment",
+        "translate"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "bitcoin price in dollars",
+      "rankedIds": [
+        "crypto-price",
+        "stock-quote",
+        "geocode-reverse",
+        "air-quality"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "spot price of XLM cryptocurrency",
+      "rankedIds": [
+        "crypto-price",
+        "stock-quote",
+        "translate"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "trading volume for a listed company",
+      "rankedIds": [
+        "stock-quote",
+        "crypto-price",
+        "sentiment",
+        "weather-history",
+        "air-quality",
+        "translate",
+        "weather-current",
+        "geocode-forward",
+        "fx-rates"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "turn a street address into coordinates",
+      "rankedIds": [
+        "geocode-forward",
+        "geocode-reverse",
+        "ip-info",
+        "sentiment",
+        "crypto-price",
+        "weather-history",
+        "air-quality",
+        "stock-quote",
+        "translate"
+      ],
+      "recall1": 0.5,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "latitude and longitude for an address",
+      "rankedIds": [
+        "geocode-reverse",
+        "geocode-forward",
+        "fx-rates",
+        "ip-info",
+        "crypto-price",
+        "weather-current",
+        "air-quality",
+        "weather-history",
+        "stock-quote",
+        "sentiment"
+      ],
+      "recall1": 0.5,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 0.8339912323981488,
+      "ndcg10": 0.8339912323981488
+    },
+    {
+      "query": "find the nearest address to gps coordinates",
+      "rankedIds": [
+        "geocode-reverse",
+        "geocode-forward",
+        "ip-info",
+        "crypto-price",
+        "translate",
+        "weather-history",
+        "weather-current",
+        "sentiment",
+        "air-quality",
+        "stock-quote"
+      ],
+      "recall1": 0.5,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "reverse geocode a lat lon point",
+      "rankedIds": [
+        "geocode-reverse",
+        "geocode-forward",
+        "sentiment",
+        "crypto-price",
+        "weather-history",
+        "air-quality",
+        "stock-quote",
+        "translate"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "where is this IP address located",
+      "rankedIds": [
+        "ip-info",
+        "geocode-reverse",
+        "geocode-forward"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "detect vpn or proxy usage for an ip",
+      "rankedIds": [
+        "ip-info",
+        "fx-rates",
+        "crypto-price",
+        "sentiment",
+        "weather-current",
+        "stock-quote",
+        "translate",
+        "geocode-forward",
+        "weather-history",
+        "air-quality"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "which ISP announces this network address",
+      "rankedIds": [
+        "ip-info",
+        "geocode-reverse",
+        "geocode-forward"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "is this customer review positive or negative",
+      "rankedIds": [
+        "sentiment",
+        "ip-info",
+        "geocode-forward",
+        "translate",
+        "stock-quote",
+        "crypto-price",
+        "weather-current"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "sentiment analysis with confidence score",
+      "rankedIds": [
+        "sentiment",
+        "crypto-price"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "classify the tone of a paragraph of text",
+      "rankedIds": [
+        "sentiment",
+        "translate",
+        "stock-quote",
+        "crypto-price",
+        "weather-history",
+        "air-quality",
+        "geocode-forward",
+        "geocode-reverse",
+        "weather-current"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "translate german text to english",
+      "rankedIds": [
+        "translate",
+        "sentiment",
+        "weather-history",
+        "ip-info",
+        "air-quality",
+        "geocode-forward",
+        "crypto-price",
+        "weather-current"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "machine translation between languages",
+      "rankedIds": [
+        "translate",
+        "fx-rates"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "detect the source language of a text automatically",
+      "rankedIds": [
+        "translate",
+        "sentiment",
+        "stock-quote",
+        "crypto-price",
+        "weather-history",
+        "air-quality",
+        "geocode-forward",
+        "geocode-reverse",
+        "weather-current"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    },
+    {
+      "query": "city temperature and wind forecast",
+      "rankedIds": [
+        "weather-current",
+        "weather-history",
+        "air-quality",
+        "ip-info",
+        "geocode-forward",
+        "geocode-reverse",
+        "stock-quote"
+      ],
+      "recall1": 1,
+      "recall3": 1,
+      "recall5": 1,
+      "reciprocalRank": 1,
+      "ndcg5": 1,
+      "ndcg10": 1
+    }
+  ]
+}
