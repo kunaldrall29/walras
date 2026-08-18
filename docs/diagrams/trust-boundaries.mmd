@@ -1,0 +1,45 @@
+%%{init: {'theme': 'neutral'}}%%
+%% The two validation boundaries. Everything in the top box is
+%% client-controlled and treated as hostile (F-072); each boundary names its
+%% controls and the negative tests that exercise them (THREAT-MODEL.md).
+flowchart TB
+  subgraph untrusted ["UNTRUSTED — client-controlled input"]
+    tx["payload.transaction<br/>(base64 XDR, F-033)"]
+    ext["echoed extensions block:<br/>bazaar info + schema,<br/>serviceName / tags / iconUrl,<br/>routeTemplate"]
+    qs["discovery query strings:<br/>query, filters, limit, cursor"]
+  end
+
+  subgraph b1 ["BOUNDARY 1 — payment verification (ExactStellarScheme, F-035)"]
+    v1["structure: one op, contract == asset,<br/>transfer(from, to, amount), arg checks"]
+    v2["simulation MUST succeed —<br/>the control against forged signatures (F-062)<br/>and replays (structural nonce, F-039/D-011)"]
+    v3["auth entries: expiry bound, credential type,<br/>no sub-invocations, all signers signed"]
+    v4["facilitator safety: never source,<br/>never payer, never in auth (F-035)"]
+  end
+
+  subgraph b2 ["BOUNDARY 2 — catalog indexing (bazaar indexer, F-072)"]
+    i1["64 KiB extensions cap<br/>before any validation (D-025)"]
+    i2["protocol invariants + client schema<br/>(both, composed correctly — F-072)"]
+    i3["soft-drop metadata rules (F-031);<br/>routeTemplate: percent-decode BEFORE<br/>traversal checks (F-030)"]
+    i4["ownership: first settled payTo owns<br/>the (resource, type, toolName) key (D-024)"]
+  end
+
+  subgraph b3 ["BOUNDARY 3 — search input (D-026, D-027)"]
+    s1["query compiled to quoted-token<br/>expressions — raw FTS5 syntax throws (F-076)"]
+    s2["cursor integrity hash — replay against a<br/>different query is a named 400 (D-027)"]
+  end
+
+  subgraph trusted ["TRUSTED — walras-held state"]
+    seeds["submitter seeds<br/>(never in any transaction the client built)"]
+    db[("SQLite catalog —<br/>written only through Boundary 2")]
+  end
+
+  chain[("Stellar ledger —<br/>the final arbiter: settlement is<br/>on-chain success, nothing less")]
+
+  tx --> b1
+  ext --> b2
+  qs --> b3
+  b1 -- "verified + settled only" --> chain
+  b1 -- "settle success gates" --> b2
+  b2 --> db
+  b3 --> db
+  seeds -. "sign rebuilt settlement tx only" .-> chain

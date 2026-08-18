@@ -1,0 +1,29 @@
+%%{init: {'theme': 'neutral'}}%%
+%% Automatic cataloging: settlement IS registration (DECISIONS D-004, D-022).
+%% Proven live: EVIDENCE S3-3 (listing created), S3-4 (hostile writes soft-dropped).
+sequenceDiagram
+  autonumber
+  participant B as Stock buyer
+  participant S as Seller<br/>(declareDiscoveryExtension<br/>in route config — F-074)
+  participant W as walras /settle
+  participant I as bazaar indexer
+  participant D as SQLite catalog
+
+  B->>S: GET /resource
+  S-->>B: 402 — resource block carries the bazaar extension
+  B->>S: paid retry — the CLIENT echoes the extension<br/>into PaymentPayload (F-032 — no echo, no listing)
+  S->>W: POST /settle
+  Note over W: settlement completes on-chain first —<br/>the payment path never waits on indexing (D-015)
+  W->>I: indexSettledPayment(payload, requirements)
+  Note over I: protocol invariants + client schema +<br/>soft-drop metadata rules + routeTemplate<br/>percent-decode-before-traversal-checks<br/>(F-030, F-031, F-072)
+  alt info valid — key unowned or owned by this payTo
+    I->>D: upsert keyed (resource, type, toolName),<br/>owned by first settled payTo (F-029, D-024)
+    W-->>S: EXTENSION-RESPONSES bazaar.status success
+  else client-attributable defect
+    I-->>W: rejected + machine code (bazaar_*)
+    W-->>S: EXTENSION-RESPONSES bazaar.status rejected,<br/>rejectedReason + code (D-014)
+  else internal indexer fault
+    I-->>W: error (never thrown into the response path)
+    W-->>S: header omitted — a walras fault is not<br/>blamed on the client (D-025)
+  end
+  Note over W,S: the SettleResponse body is identical in all three branches

@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [main, session-0-verification]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Single stellar-sdk in tree (DECISIONS D-013)
+        run: pnpm check:deps
+      - name: License gate G-LIC (DECISIONS D-031)
+        run: pnpm check:licenses
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm -r test
+      - name: Search-quality gate (fails on >5% nDCG@10 regression vs eval/search/baseline.json)
+        run: pnpm eval:search --gate
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Regenerate generated docs and diagrams
+        run: pnpm docs:gen
+      - name: Generated artifacts are committed and current
+        run: git diff --exit-code
+      - name: Docs gate (drift, OpenAPI, stale SVGs, links, claims audit)
+        run: pnpm docs:check

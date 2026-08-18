@@ -1,0 +1,38 @@
+{
+  "name": "@walras/demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Session 2 acceptance demo: stock @x402/express seller + stock @x402/fetch buyer against the walras facilitator",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "seller": "tsx seller.ts",
+    "buyer": "tsx buyer.ts",
+    "seed": "tsx seed-catalog.ts",
+    "hostile": "tsx hostile-client.ts",
+    "mcp-seller": "tsx mcp-seller.ts",
+    "mcp-session": "tsx mcp-session.ts"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^16.2.0",
+    "@x402/core": "2.20.0",
+    "@x402/express": "2.20.0",
+    "@x402/fetch": "2.20.0",
+    "@x402/stellar": "2.20.0",
+    "express": "^4.21.2",
+    "@x402/extensions": "2.20.0",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@x402/mcp": "2.20.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.23",
+    "@types/node": "^24.10.1",
+    "tsx": "^4.21.1",
+    "typescript": "^5.9.3"
+  }
+}

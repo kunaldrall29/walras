@@ -1,0 +1,35 @@
+{
+  "name": "@walras/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server over the walras Bazaar — search_resources and paid_call, so an agent completes discover→pay using only MCP tools",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@walras/facilitator": "workspace:*",
+    "@x402/core": "2.20.0",
+    "@x402/fetch": "2.20.0",
+    "@x402/mcp": "2.20.0",
+    "@x402/stellar": "2.20.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.21.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

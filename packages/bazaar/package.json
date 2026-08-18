@@ -1,0 +1,27 @@
+{
+  "name": "@walras/bazaar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bazaar discovery catalog for the walras facilitator — settle-gated indexing and spec-shaped browsing",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@x402/core": "2.20.0",
+    "@x402/extensions": "2.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,21 @@
+%%{init: {'theme': 'neutral'}}%%
+%% SCF submission: high-level diagram — deliberately simpler than the detailed
+%% docs/diagrams set. Rendered to high-level-diagram.svg via pnpm docs:gen.
+flowchart LR
+  agent["Agent / buyer<br/>(stock x402 SDK<br/>or any MCP client)"]
+
+  subgraph walras ["walras — one Node process + one SQLite file"]
+    mcp["MCP tools<br/>search_resources · paid_call"]
+    fac["Facilitator<br/>POST /verify · POST /settle"]
+    catalog[("Bazaar catalog<br/>GET /discovery/search · /resources")]
+  end
+
+  seller["Seller's paid API<br/>(HTTP route or MCP tool)"]
+  stellar[("Stellar testnet<br/>public Soroban RPC")]
+
+  agent -- "1 · search the catalog" --> mcp
+  mcp -- "ranked results" --> catalog
+  agent -- "2 · request → 402 terms →<br/>signed payment retry" --> seller
+  seller -- "3 · verify, then settle" --> fac
+  fac -- "4 · submit transfer<br/>(network fee sponsored)" --> stellar
+  fac -- "5 · settlement auto-creates<br/>the catalog listing" --> catalog

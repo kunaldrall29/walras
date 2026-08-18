@@ -1,0 +1,7 @@
+{
+  "comment": "Committed search-quality baseline for the regression gate (`pnpm eval:search --gate`). A run whose nDCG@10 falls more than 5% below ndcgAt10 here fails. Update this file deliberately — alongside the retriever change that moves the numbers — never as a side effect.",
+  "source": "eval/search/results/2026-08-03.json",
+  "retriever": "fts5-bm25-baseline",
+  "corpusSha256": "094a953dfa0ecafbef56e612224a411cb21823e64e6bb54db944f1cac790e82b",
+  "ndcgAt10": 0.9094614637846288
+}
