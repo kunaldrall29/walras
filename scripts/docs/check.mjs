@@ -168,13 +168,15 @@ const ALL_DOCS = [...markdownFilesUnder(resolve(REPO_ROOT, "docs")), ...ROOT_DOC
 
 /**
  * Verbatim documents — exempt from every authored-content rule. rfp.md is an
- * external capture; walras-technical-architecture.md is the grant document of
- * record, rendered and republished verbatim (its [BUILT]/[T1]/[T2]/[T3]
+ * external capture; scf/technical-architecture-submitted.md is the SCF grant
+ * document of record, republished verbatim (its [BUILT]/[T1]/[T2]/[T3]
  * tranche markers are its own evidence discipline, in place of EVIDENCE refs).
+ * The current architecture page, docs/technical-architecture.md, is NOT exempt:
+ * it is audited like every other authored document.
  */
 const VERBATIM = new Set([
   resolve(REPO_ROOT, "docs", "rfp.md"),
-  resolve(REPO_ROOT, "docs", "walras-technical-architecture.md"),
+  resolve(REPO_ROOT, "docs", "scf", "technical-architecture-submitted.md"),
 ]);
 /** The evidence ledgers themselves — capability claims here ARE the evidence. */
 const LEDGERS = new Set(
@@ -230,6 +232,7 @@ const GENERATED_DOC_DIRS = ["docs/reference/", "docs/api/", "docs/diagrams/"].ma
 
 /** Files that must cite FACTS/DECISIONS rows at least once (rule R1 floor). */
 const NORMATIVE = [
+  "docs/technical-architecture.md",
   "docs/ARCHITECTURE.md",
   "docs/MODELS.md",
   "docs/THREAT-MODEL.md",

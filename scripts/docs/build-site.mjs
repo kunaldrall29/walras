@@ -42,7 +42,7 @@ const PUPPETEER_CONFIG = join(REPO_ROOT, "scripts", "docs", "puppeteer-config.js
 /** repo-relative markdown source → site route (root-absolute, .html). */
 const PAGES = new Map([
   ["README.md", "/index.html"],
-  ["docs/walras-technical-architecture.md", "/technical-architecture.html"],
+  ["docs/technical-architecture.md", "/technical-architecture.html"],
   ["SECURITY.md", "/security.html"],
   ["CONTRIBUTING.md", "/contributing.html"],
   ["docs/quickstart.md", "/quickstart.html"],
@@ -68,6 +68,7 @@ const PAGES = new Map([
   ["docs/scf/privacy.md", "/scf/privacy.html"],
   ["docs/scf/maintenance.md", "/scf/maintenance.html"],
   ["docs/scf/licensing.md", "/scf/licensing.html"],
+  ["docs/scf/technical-architecture-submitted.md", "/scf/technical-architecture-submitted.html"],
 ]);
 
 /** repo-relative asset directories copied verbatim. */
@@ -85,7 +86,7 @@ const ASSET_FILES = new Map([
 const NAV = [
   ["Start", [
     ["/index.html", "Overview"],
-    ["/technical-architecture.html", "ARCHITECTURE · MD"],
+    ["/technical-architecture.html", "Technical architecture"],
     ["/quickstart.html", "Quickstart"],
     ["/faq.html", "FAQ"],
     ["/glossary.html", "Glossary"],
@@ -117,6 +118,7 @@ const NAV = [
     ["/security.html", "Security policy"],
     ["/contributing.html", "Contributing"],
     ["/scf/stack-explanation.html", "SCF snippets"],
+    ["/scf/technical-architecture-submitted.html", "Grant submission (verbatim)"],
   ]],
 ];
 
@@ -290,11 +292,15 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   return `<a class="figure" href="${src}"><img src="${src}" alt="Diagram ${env.mermaid}, rendered from the mermaid source in this document"></a>\n`;
 };
 
-/** The grant document of record — rendered verbatim (see renderPage). */
-const ARCH_SOURCE = "docs/walras-technical-architecture.md";
+/** The architecture page: evidence-cited, claims-audited like every other doc. */
+const ARCH_SOURCE = "docs/technical-architecture.md";
+/** The SCF grant document of record — rendered verbatim (see renderPage). */
+const SUBMITTED_SOURCE = "docs/scf/technical-architecture-submitted.md";
+/** Pages whose [LIVE]/[BUILT]/[PLANNED]/[T1-3] status tokens render as chips. */
+const CHIP_PAGES = new Set([ARCH_SOURCE, SUBMITTED_SOURCE]);
 
 /**
- * Build-supplied front matter for pages whose markdown must stay untouched.
+ * Build-supplied front matter under the H1 of the two architecture pages.
  * The pinned spec commit is confirmed against the docs/FACTS.md header:
  * x402-foundation/x402 @ 17fc9890ade45a570a019352a3573391ad5d1e1f.
  */
@@ -302,21 +308,36 @@ const PAGE_META = new Map([
   [
     ARCH_SOURCE,
     {
-      title: "Walras Technical Architecture",
+      title: "walras technical architecture",
       line:
-        `Last updated 2026-08-14 · pinned spec commit <code>17fc989</code> · ` +
+        `Last updated 2026-09-05 · pinned spec commit <code>17fc989</code> · ` +
+        `<span class="chip chip-live">LIVE</span> on testnet with linked evidence · ` +
+        `<span class="chip chip-built">BUILT</span> in the repository and tested · ` +
+        `<span class="chip chip-planned">PLANNED</span> grant scope, by tranche · ` +
         `<a href="https://raw.githubusercontent.com/kunaldrall29/walras/${BRANCH}/${ARCH_SOURCE}">Download .md</a>`,
+    },
+  ],
+  [
+    SUBMITTED_SOURCE,
+    {
+      title: "Walras Technical Architecture — SCF #45 submission",
+      line:
+        `The grant document of record, republished verbatim (last updated 2026-08-14). ` +
+        `The current architecture reference is <a href="/technical-architecture">Technical architecture</a>. · ` +
+        `<a href="https://raw.githubusercontent.com/kunaldrall29/walras/${BRANCH}/${SUBMITTED_SOURCE}">Download .md</a>`,
     },
   ],
 ]);
 
-/** [BUILT]/[T1]/[T2]/[T3] tranche tokens, with their optional qualifiers. */
-const CHIP_TOKEN = /\[(BUILT|T[1-3])((?::| )[^\]]*)?\]/g;
+/** [LIVE]/[BUILT]/[PLANNED]/[T1]/[T2]/[T3] status tokens, with their optional qualifiers. */
+const CHIP_TOKEN = /\[(LIVE|BUILT|PLANNED|T[1-3])((?::| )[^\]]*)?\]/g;
+/** Chip class per status word; tranche-only tokens get the neutral chip. */
+const CHIP_CLASS = { LIVE: "chip chip-live", BUILT: "chip chip-built", PLANNED: "chip chip-planned" };
 
 /**
  * Replaces tranche tokens in one text token with status-chip spans. The words
  * inside the brackets are preserved exactly; only the brackets become chip
- * styling. Applies solely to the technical-architecture page.
+ * styling. Applies to the pages in CHIP_PAGES.
  *
  * @param token - A "text" token.
  * @returns Replacement token list.
@@ -328,7 +349,7 @@ function transformChipText(token) {
   for (const match of token.content.matchAll(CHIP_TOKEN)) {
     const before = token.content.slice(last, match.index);
     if (before) out.push(Object.assign(new Token("text", "", 0), { content: before }));
-    const cls = match[1] === "BUILT" ? "chip chip-built" : "chip";
+    const cls = CHIP_CLASS[match[1]] ?? "chip";
     const label = md.utils.escapeHtml(match[1] + (match[2] ?? ""));
     out.push(
       Object.assign(new Token("html_inline", "", 0), {
@@ -343,12 +364,14 @@ function transformChipText(token) {
   return out;
 }
 
-/** Page-scoped styles for the technical-architecture page only. */
+/** Page-scoped styles for the CHIP_PAGES. */
 const ARCH_STYLE = `
 <style>
 .page-meta{margin:-.35rem 0 1.8rem;font-size:.85rem;color:var(--muted)}
 .chip{display:inline-block;padding:.1em .55em;border:1px solid var(--line);border-radius:999px;background:var(--code-bg);color:var(--muted);font-size:.72em;font-weight:600;line-height:1.6;white-space:nowrap;vertical-align:.1em}
-.chip-built{color:var(--accent);border-color:var(--accent)}
+.chip-live{color:var(--accent);border-color:var(--accent);background:transparent}
+.chip-built{color:var(--fg);border-color:var(--fg);background:transparent}
+.chip-planned{border-style:dashed}
 .hanchor{margin-left:.45rem;font-weight:400;font-size:.85em;text-decoration:none;color:var(--muted);opacity:0}
 h2:hover .hanchor,h3:hover .hanchor,.hanchor:focus{opacity:1}
 @media print{
@@ -405,15 +428,16 @@ function renderPage(sourceRel, route) {
     }
     // Headings keep their document names (the evidence ledger's own title and
     // section ids must survive); body text gets the evidence-word cleanup.
-    // The technical-architecture document is exempt — its wording is verbatim
-    // by rule; its only transform is presentational (tranche tokens → chips).
-    if (sourceRel === ARCH_SOURCE) {
-      token.children = (token.children ?? []).flatMap(child =>
-        child.type === "text" ? transformChipText(child) : [child],
-      );
-    } else if (tokens[i - 1]?.type !== "heading_open") {
+    // The submitted grant document is exempt — its wording is verbatim by
+    // rule; its only transform is presentational (status tokens → chips).
+    if (sourceRel !== SUBMITTED_SOURCE && tokens[i - 1]?.type !== "heading_open") {
       token.children = (token.children ?? []).flatMap(child =>
         child.type === "text" ? transformEvidenceText(child) : [child],
+      );
+    }
+    if (CHIP_PAGES.has(sourceRel)) {
+      token.children = (token.children ?? []).flatMap(child =>
+        child.type === "text" ? transformChipText(child) : [child],
       );
     }
   }
@@ -431,7 +455,7 @@ function renderPage(sourceRel, route) {
         `<${tag} id="${id}">${inner}<a class="hanchor" href="#${id}" aria-label="Link to this section">#</a></${tag}>`,
     );
   }
-  const extraStyle = sourceRel === ARCH_SOURCE ? ARCH_STYLE : "";
+  const extraStyle = CHIP_PAGES.has(sourceRel) ? ARCH_STYLE : "";
   const nav = NAV.map(
     ([group, items]) =>
       `<div class="nav-group"><div class="nav-title">${group}</div>${items
