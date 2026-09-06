@@ -632,5 +632,117 @@ window.addEventListener('keydown', function (e) {
 
 run();
 </script>
+
+<!-- ── v0 preview invite ──────────────────────────────────────────────────
+     Points at the rebuilt landing page on v0.walras.space. Non-modal, so it
+     never traps focus; dismissing hides it for this page view only (it
+     returns on reload — no persistence, matching the script below).
+     Remove this block when v0 becomes walras.space. -->
+<style>
+  #v0-note {
+    position: fixed; right: 20px; bottom: 20px; z-index: 9999;
+    width: min(340px, calc(100vw - 32px));
+    background: #171B2B; color: #F6F3EC;
+    border: 1px solid #2A3142; border-radius: 10px;
+    padding: 18px 18px 16px;
+    box-shadow: 0 18px 50px rgba(23, 27, 43, .28);
+    font-family: 'Archivo', 'Helvetica Neue', sans-serif;
+    opacity: 0; transform: translateY(10px);
+    transition: opacity 320ms ease, transform 320ms cubic-bezier(.16,1,.3,1);
+  }
+  #v0-note[data-shown] { opacity: 1; transform: none; }
+  #v0-note[hidden] { display: none; }
+  #v0-note .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+    color: #E29A3C; margin: 0 0 8px;
+  }
+  #v0-note h2 {
+    margin: 0 0 6px; font-size: 16px; font-weight: 600; line-height: 1.3; color: #F6F3EC;
+  }
+  #v0-note p {
+    margin: 0 0 14px; font-size: 13px; line-height: 1.55; color: #B9B3A4;
+  }
+  #v0-note .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #v0-note a.go {
+    display: inline-flex; align-items: center; min-height: 38px; padding: 0 16px;
+    background: #E29A3C; color: #171B2B; border-radius: 999px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px; text-decoration: none; font-weight: 500;
+    transition: background 160ms ease;
+  }
+  #v0-note a.go:hover { background: #EFB566; }
+  #v0-note button.dismiss {
+    background: none; border: 0; cursor: pointer; color: #6B6E76;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px;
+    min-height: 38px; padding: 0 6px;
+  }
+  #v0-note button.dismiss:hover { color: #F6F3EC; }
+  #v0-note :focus-visible { outline: 2px solid #E29A3C; outline-offset: 2px; }
+  @media (max-width: 520px) {
+    #v0-note { right: 12px; left: 12px; bottom: 12px; width: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #v0-note { transition: none; opacity: 1; transform: none; }
+  }
+</style>
+
+<aside id="v0-note" aria-label="Preview the new walras.space" hidden>
+  <p class="eyebrow">Preview</p>
+  <h2>The new walras.space is up.</h2>
+  <p>A rebuilt landing page, roadmap, Bazaar and conformance table — live for review.</p>
+  <div class="row">
+    <a class="go" href="https://v0.walras.space" rel="noopener">View it &rarr;</a>
+    <button type="button" class="dismiss">Not now</button>
+  </div>
+</aside>
+
+<script>
+(function () {
+  var el = document.getElementById('v0-note');
+  if (!el) return;
+
+  // Shows on EVERY visit — no persistence. Dismissing hides it for this page
+  // view only; a reload brings it back. Clear the old flag from the earlier
+  // remember-my-dismissal version so no stale value lingers in storage.
+  try { localStorage.removeItem('walras-v0-note-dismissed'); } catch (e) {}
+
+  function close() {
+    el.removeAttribute('data-shown');
+    setTimeout(function () { el.hidden = true; }, 320);
+    document.removeEventListener('keydown', onKey);
+  }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+
+  setTimeout(function () {
+    el.hidden = false;
+    requestAnimationFrame(function () { el.setAttribute('data-shown', ''); });
+    document.addEventListener('keydown', onKey);
+  }, 900);
+
+  el.querySelector('.dismiss').addEventListener('click', close);
+})();
+</script>
+
+<!-- ── Touch targets ────────────────────────────────────────────────────────
+     Nav, footer and evidence links render ~14px tall, below the 24px WCAG
+     2.5.8 floor. Coarse pointers only, so desktop layout is unchanged.
+     Inline styles on these links set colour/size but not display or
+     min-height, so no !important is needed. -->
+<style>
+@media (pointer: coarse) {
+  nav a[href],
+  footer a[href],
+  .navlink,
+  .footlink,
+  main a[href*="github.com"],
+  main a[href*="stellar.expert"] {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  nav { row-gap: 4px; }
+}
+</style>
 </body>
 </html>

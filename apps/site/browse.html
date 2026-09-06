@@ -82,5 +82,26 @@ a:hover { color: #8C2B23; }
     </div>
   </footer>
 </div>
+
+<!-- ── Touch targets ────────────────────────────────────────────────────────
+     Nav, footer and evidence links render ~14px tall, below the 24px WCAG
+     2.5.8 floor. Coarse pointers only, so desktop layout is unchanged.
+     Inline styles on these links set colour/size but not display or
+     min-height, so no !important is needed. -->
+<style>
+@media (pointer: coarse) {
+  nav a[href],
+  footer a[href],
+  .navlink,
+  .footlink,
+  main a[href*="github.com"],
+  main a[href*="stellar.expert"] {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  nav { row-gap: 4px; }
+}
+</style>
 </body>
 </html>
